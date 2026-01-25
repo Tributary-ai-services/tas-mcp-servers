@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crawl4ai
+  namespace: tas-mcp-servers
+  labels:
+    app: crawl4ai
+    component: web-scraper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crawl4ai
+  template:
+    metadata:
+      labels:
+        app: crawl4ai
+        component: web-scraper
+    spec:
+      containers:
+      - name: crawl4ai
+        image: unclecode/crawl4ai:latest
+        ports:
+        - containerPort: 11235
+          name: http
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: crawl4ai-config
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        volumeMounts:
+        - name: shm
+          mountPath: /dev/shm
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 11235
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 11235
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      # Shared memory volume for headless browser (Chromium/Playwright)
+      # Required minimum 3GB for stable browser operation
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 3Gi

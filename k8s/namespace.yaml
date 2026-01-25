@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tas-mcp-servers
+  labels:
+    name: tas-mcp-servers
+    project: tas
+    purpose: mcp-servers
