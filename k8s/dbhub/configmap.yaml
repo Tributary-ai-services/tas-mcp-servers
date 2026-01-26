@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dbhub-config
+  namespace: tas-mcp-servers
+  labels:
+    app: dbhub
+    component: database-mcp
+data:
+  # DBHub TOML configuration with multiple database sources
+  # DSNs are injected via environment variables from secrets
+  dbhub.toml: |
+    # TAS Shared Infrastructure Databases
+    [[sources]]
+    id = "tas_postgres"
+    dsn = "${TAS_POSTGRES_DSN}"
+    connection_timeout = 30
+    query_timeout = 30
+
+    # Add more sources as needed:
+    # [[sources]]
+    # id = "tas_mysql"
+    # dsn = "${TAS_MYSQL_DSN}"
+    # connection_timeout = 30
+    # query_timeout = 30
+
+    # [[sources]]
+    # id = "analytics"
+    # dsn = "${ANALYTICS_DSN}"
+    # connection_timeout = 30
+    # query_timeout = 60
+
+    # Default tool configuration - read-only for safety
+    [[tools]]
+    name = "execute_sql"
+    source = "*"
+    readonly = true
+    max_rows = 1000
+
+    [[tools]]
+    name = "search_objects"
+    source = "*"

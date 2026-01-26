@@ -7,6 +7,7 @@ metadata:
 resources:
   - namespace.yaml
   - crawl4ai
+  - dbhub
 
 commonLabels:
   project: tas
