@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crawl4ai-config
+  namespace: tas-mcp-servers
+  labels:
+    app: crawl4ai
+    component: web-scraper
+data:
+  # Maximum number of concurrent crawl tasks
+  MAX_CONCURRENT_TASKS: "5"
+  # Default timeout for crawl operations (milliseconds)
+  DEFAULT_TIMEOUT: "30000"
+  # Enable caching of crawl results
+  ENABLE_CACHING: "true"
+  # Log level for debugging
+  LOG_LEVEL: "INFO"
