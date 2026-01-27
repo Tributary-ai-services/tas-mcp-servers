@@ -1,0 +1,63 @@
+apiVersion: dbhub.tas.io/v1alpha1
+kind: Database
+metadata:
+  name: tas-postgres
+  namespace: tas-mcp-servers
+  labels:
+    environment: production
+    team: platform
+spec:
+  # Database type: postgres, mysql, mariadb, sqlserver, sqlite
+  type: postgres
+
+  # Connection details
+  host: postgres-shared.tas-shared.svc.cluster.local
+  port: 5432
+  database: tas_shared
+
+  # Reference to Secret containing username and password
+  credentialsRef:
+    name: postgres-shared-secret
+    namespace: tas-shared
+    userKey: username
+    passwordKey: password
+
+  # Connection settings
+  connectionTimeout: 30
+  queryTimeout: 15
+  sslMode: disable
+
+  # Access policy
+  readOnly: true
+  maxRows: 1000
+
+  # Description
+  description: "TAS shared PostgreSQL database for platform services"
+---
+apiVersion: dbhub.tas.io/v1alpha1
+kind: Database
+metadata:
+  name: analytics-mysql
+  namespace: tas-mcp-servers
+  labels:
+    environment: production
+    team: analytics
+spec:
+  type: mysql
+  host: mysql-analytics.tas-analytics.svc.cluster.local
+  port: 3306
+  database: analytics
+
+  credentialsRef:
+    name: mysql-analytics-secret
+    userKey: user
+    passwordKey: pass
+
+  connectionTimeout: 30
+  queryTimeout: 60
+  sslMode: require
+
+  readOnly: true
+  maxRows: 5000
+
+  description: "Analytics MySQL database for reporting"

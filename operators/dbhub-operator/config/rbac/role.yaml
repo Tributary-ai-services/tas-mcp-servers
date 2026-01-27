@@ -1,0 +1,35 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - dbhub.tas.io
+  resources:
+  - databases
+  - dbhubinstances
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - dbhub.tas.io
+  resources:
+  - databases/finalizers
+  - dbhubinstances/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - dbhub.tas.io
+  resources:
+  - databases/status
+  - dbhubinstances/status
+  verbs:
+  - get
+  - patch
+  - update
