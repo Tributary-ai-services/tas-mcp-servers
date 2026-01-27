@@ -1,6 +1,6 @@
 module github.com/Tributary-ai-services/dbhub-operator
 
-go 1.25.3
+go 1.25.0
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3

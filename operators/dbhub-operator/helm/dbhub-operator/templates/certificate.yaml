@@ -1,0 +1,27 @@
+{{- if and .Values.webhooks.enabled .Values.webhooks.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "dbhub-operator.fullname" . }}-selfsigned-issuer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dbhub-operator.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "dbhub-operator.webhookCertName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dbhub-operator.labels" . | nindent 4 }}
+spec:
+  dnsNames:
+    - {{ include "dbhub-operator.webhookServiceName" . }}.{{ .Release.Namespace }}.svc
+    - {{ include "dbhub-operator.webhookServiceName" . }}.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: {{ include "dbhub-operator.fullname" . }}-selfsigned-issuer
+  secretName: {{ include "dbhub-operator.webhookCertName" . }}
+{{- end }}
