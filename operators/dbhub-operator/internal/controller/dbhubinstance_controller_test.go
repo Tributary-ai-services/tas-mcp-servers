@@ -32,13 +32,13 @@ import (
 
 var _ = Describe("DBHubInstance Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		const resourceName = "test-dbhub-instance"
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
 		dbhubinstance := &dbhubv1alpha1.DBHubInstance{}
 
@@ -46,26 +46,46 @@ var _ = Describe("DBHubInstance Controller", func() {
 			By("creating the custom resource for the Kind DBHubInstance")
 			err := k8sClient.Get(ctx, typeNamespacedName, dbhubinstance)
 			if err != nil && errors.IsNotFound(err) {
+				replicas := int32(1)
 				resource := &dbhubv1alpha1.DBHubInstance{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: dbhubv1alpha1.DBHubInstanceSpec{
+						Replicas:  &replicas,
+						Image:     "bytebase/dbhub:latest",
+						Transport: dbhubv1alpha1.TransportTypeHTTP,
+						Port:      8080,
+						DatabaseSelector: &dbhubv1alpha1.DatabaseSelector{
+							MatchLabels: map[string]string{
+								"environment": "test",
+							},
+						},
+						DefaultPolicy: &dbhubv1alpha1.DefaultPolicy{
+							ReadOnly: true,
+							MaxRows:  1000,
+							AllowedOperations: []string{
+								"execute_sql",
+								"search_objects",
+							},
+						},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
+			// Cleanup the DBHubInstance resource
 			resource := &dbhubv1alpha1.DBHubInstance{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance DBHubInstance")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			if err == nil {
+				By("Cleanup the specific resource instance DBHubInstance")
+				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			}
 		})
+
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &DBHubInstanceReconciler{
@@ -77,8 +97,13 @@ var _ = Describe("DBHubInstance Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+
+			// Verify the resource status was updated
+			By("Checking the resource status")
+			updatedInstance := &dbhubv1alpha1.DBHubInstance{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedInstance)).To(Succeed())
+			// With no matching databases, the instance should still create resources
+			Expect(updatedInstance.Status.Endpoint).To(ContainSubstring("test-dbhub-instance"))
 		})
 	})
 })

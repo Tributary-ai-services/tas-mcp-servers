@@ -21,6 +21,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -32,40 +33,82 @@ import (
 
 var _ = Describe("Database Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		const resourceName = "test-database"
+		const secretName = "test-database-secret"
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
 		database := &dbhubv1alpha1.Database{}
 
 		BeforeEach(func() {
+			// Create a secret for database credentials
+			By("creating the credentials secret")
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"username": []byte("testuser"),
+					"password": []byte("testpass"),
+				},
+			}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: "default"}, &corev1.Secret{})
+			if err != nil && errors.IsNotFound(err) {
+				Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+			}
+
 			By("creating the custom resource for the Kind Database")
-			err := k8sClient.Get(ctx, typeNamespacedName, database)
+			err = k8sClient.Get(ctx, typeNamespacedName, database)
 			if err != nil && errors.IsNotFound(err) {
 				resource := &dbhubv1alpha1.Database{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: dbhubv1alpha1.DatabaseSpec{
+						Type:     dbhubv1alpha1.DatabaseTypePostgres,
+						Host:     "localhost",
+						Port:     5432,
+						Database: "testdb",
+						CredentialsRef: dbhubv1alpha1.CredentialsRef{
+							Name:        secretName,
+							UserKey:     "username",
+							PasswordKey: "password",
+						},
+						SSLMode:           dbhubv1alpha1.SSLModeDisable,
+						ConnectionTimeout: 30,
+						QueryTimeout:      60,
+						ReadOnly:          true,
+						MaxRows:           1000,
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
+			// Cleanup the Database resource
 			resource := &dbhubv1alpha1.Database{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
+			if err == nil {
+				By("Cleanup the specific resource instance Database")
+				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			}
 
-			By("Cleanup the specific resource instance Database")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			// Cleanup the Secret
+			secret := &corev1.Secret{}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: "default"}, secret)
+			if err == nil {
+				By("Cleanup the credentials secret")
+				Expect(k8sClient.Delete(ctx, secret)).To(Succeed())
+			}
 		})
+
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &DatabaseReconciler{
@@ -76,9 +119,16 @@ var _ = Describe("Database Controller", func() {
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
+			// The reconciler will fail to connect since there's no real database,
+			// but it should not return an error - it should update the status
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+
+			// Verify the resource status was updated
+			By("Checking the resource status")
+			updatedDatabase := &dbhubv1alpha1.Database{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedDatabase)).To(Succeed())
+			Expect(updatedDatabase.Status.Phase).To(Equal(dbhubv1alpha1.DatabasePhaseFailed))
+			Expect(updatedDatabase.Status.DSN).To(ContainSubstring("postgres://localhost:5432/testdb"))
 		})
 	})
 })
