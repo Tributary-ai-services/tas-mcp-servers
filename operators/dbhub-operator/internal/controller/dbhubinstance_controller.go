@@ -253,23 +253,30 @@ dsn = "${%s_DSN}"
 		configBuilder.WriteString("\n")
 	}
 
-	// Write tools section based on default policy
-	if instance.Spec.DefaultPolicy != nil {
+	// Write tools section - each tool must reference a source
+	if instance.Spec.DefaultPolicy != nil && len(databases) > 0 {
 		policy := instance.Spec.DefaultPolicy
 
-		configBuilder.WriteString("[[tools]]\n")
-		configBuilder.WriteString("name = \"execute_sql\"\n")
-		if policy.ReadOnly {
-			configBuilder.WriteString("readonly = true\n")
-		}
-		if policy.MaxRows > 0 {
-			configBuilder.WriteString(fmt.Sprintf("max_rows = %d\n", policy.MaxRows))
-		}
-		configBuilder.WriteString("\n")
+		// Generate tools for each database source
+		for _, db := range databases {
+			// execute_sql tool for this database
+			configBuilder.WriteString("[[tools]]\n")
+			configBuilder.WriteString("name = \"execute_sql\"\n")
+			configBuilder.WriteString(fmt.Sprintf("source = \"%s\"\n", db.Name))
+			if policy.ReadOnly {
+				configBuilder.WriteString("readonly = true\n")
+			}
+			if policy.MaxRows > 0 {
+				configBuilder.WriteString(fmt.Sprintf("max_rows = %d\n", policy.MaxRows))
+			}
+			configBuilder.WriteString("\n")
 
-		configBuilder.WriteString("[[tools]]\n")
-		configBuilder.WriteString("name = \"search_objects\"\n")
-		configBuilder.WriteString("\n")
+			// search_objects tool for this database
+			configBuilder.WriteString("[[tools]]\n")
+			configBuilder.WriteString("name = \"search_objects\"\n")
+			configBuilder.WriteString(fmt.Sprintf("source = \"%s\"\n", db.Name))
+			configBuilder.WriteString("\n")
+		}
 	}
 
 	return configBuilder.String(), credentials, nil
