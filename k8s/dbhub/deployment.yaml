@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dbhub
+  namespace: tas-mcp-servers
+  labels:
+    app: dbhub
+    component: database-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dbhub
+  template:
+    metadata:
+      labels:
+        app: dbhub
+        component: database-mcp
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+      - name: dbhub
+        image: bytebase/dbhub:latest
+        args:
+          - "--transport"
+          - "http"
+          - "--port"
+          - "8080"
+          - "--dsn"
+          - "$(TAS_POSTGRES_DSN)"
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: TAS_POSTGRES_DSN
+          valueFrom:
+            secretKeyRef:
+              name: dbhub-secrets
+              key: TAS_POSTGRES_DSN
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
