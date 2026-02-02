@@ -1,0 +1,23 @@
+# Build artifacts
+operators/
+
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+bin/
+
+# Test coverage
+*.out
+cover.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
