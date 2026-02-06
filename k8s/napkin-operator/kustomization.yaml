@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: napkin-operator
+
+namespace: tas-mcp-servers
+
+resources:
+  - ../../operators/napkin-operator/deployments/kubernetes/crds/napkinvisual_crd.yaml
+  - rbac.yaml
+  - deployment.yaml
+  - service.yaml
+  - configmap.yaml
+
+commonLabels:
+  project: tas
+  tier: mcp-servers
+  service: napkin-operator

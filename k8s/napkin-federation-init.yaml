@@ -1,0 +1,60 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: napkin-federation-init
+  namespace: tas-mcp-servers
+  labels:
+    app: napkin-federation-init
+    component: init-job
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: napkin-federation-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: federation-init
+        image: curlimages/curl:8.8.0
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for napkin-mcp to be healthy..."
+          for i in $(seq 1 30); do
+            if curl -sf http://napkin-mcp.tas-mcp-servers.svc.cluster.local:8087/health; then
+              echo "napkin-mcp is healthy"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 5
+          done
+
+          echo "Registering napkin-mcp with TAS MCP federation..."
+          curl -X POST http://tas-mcp-service.tas-mcp:8082/api/v1/federation/servers \
+               -H 'Content-Type: application/json' \
+               -d '{
+                 "id": "napkin-mcp-server-v1.0.0",
+                 "name": "Napkin AI MCP Server v1.0.0",
+                 "description": "Visual generation from text using Napkin AI with MinIO storage",
+                 "version": "1.0.0",
+                 "category": "visual-generation",
+                 "endpoint": "http://napkin-mcp.tas-mcp-servers.svc.cluster.local:8087",
+                 "protocol": "http",
+                 "auth": {
+                   "type": "none",
+                   "config": {}
+                 },
+                 "capabilities": [
+                   "generate_visual", "check_visual_status", "download_visual",
+                   "list_styles", "list_visuals", "create_napkin_visual_cr"
+                 ],
+                 "tags": ["nodejs", "napkin-ai", "visual-generation", "svg", "png", "minio", "federation", "v1.0.0"],
+                 "health_check": {
+                   "enabled": true,
+                   "interval": "30s",
+                   "timeout": "10s",
+                   "path": "/health"
+                 }
+               }' && echo "Registration successful" || echo "Registration may have failed"

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: napkin-mcp
+  namespace: tas-mcp-servers
+  labels:
+    app: napkin-mcp
+    component: mcp-server
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8087
+    targetPort: 8087
+    protocol: TCP
+    name: http
+  selector:
+    app: napkin-mcp

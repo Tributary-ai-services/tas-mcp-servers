@@ -7,6 +7,9 @@ metadata:
 resources:
   - namespace.yaml
   - crawl4ai
+  - napkin-mcp
+  - napkin-operator
+  - napkin-federation-init.yaml
 
 commonLabels:
   project: tas
