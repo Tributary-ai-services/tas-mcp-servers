@@ -19,7 +19,8 @@ spec:
     spec:
       containers:
       - name: napkin-mcp
-        image: tas-mcp/napkin-mcp-server:1.0.0
+        image: registry-api.tas.scharber.com/napkin-mcp-server:1.0.0
+        imagePullPolicy: Always
         ports:
         - containerPort: 8087
           name: http

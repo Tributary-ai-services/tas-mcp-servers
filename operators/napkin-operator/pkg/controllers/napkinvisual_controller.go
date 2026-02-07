@@ -1,7 +1,3 @@
-//go:build ignore
-// +build ignore
-
-//nolint:all // Kubernetes controller - dependencies resolved at build time
 package controllers
 
 import (

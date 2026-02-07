@@ -8,7 +8,7 @@ metadata:
     component: operator
 data:
   NAPKIN_API_BASE_URL: "https://api.napkin.ai"
-  MINIO_ENDPOINT: "tas-minio-shared.tas-shared.svc.cluster.local:9000"
+  MINIO_ENDPOINT: "minio-shared.tas-shared.svc.cluster.local:9000"
   MINIO_ACCESS_KEY: "minioadmin"
   MINIO_SECRET_KEY: "minioadmin123"
   LOG_LEVEL: "info"

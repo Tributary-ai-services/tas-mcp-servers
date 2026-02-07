@@ -32,7 +32,7 @@ spec:
           done
 
           echo "Registering napkin-mcp with TAS MCP federation..."
-          curl -X POST http://tas-mcp-service.tas-mcp:8082/api/v1/federation/servers \
+          curl -X POST http://prod-tas-mcp-http.tas-mcp-prod.svc.cluster.local:8082/api/v1/federation/servers \
                -H 'Content-Type: application/json' \
                -d '{
                  "id": "napkin-mcp-server-v1.0.0",

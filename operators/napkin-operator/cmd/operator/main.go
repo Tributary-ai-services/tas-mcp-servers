@@ -1,6 +1,3 @@
-//go:build ignore
-// +build ignore
-
 package main
 
 import (
@@ -45,7 +42,7 @@ func main() {
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8089", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
 	flag.StringVar(&napkinURL, "napkin-url", getEnv("NAPKIN_API_BASE_URL", "https://api.napkin.ai"), "Napkin AI API base URL")
-	flag.StringVar(&minioEndpoint, "minio-endpoint", getEnv("MINIO_ENDPOINT", "tas-minio-shared:9000"), "MinIO endpoint")
+	flag.StringVar(&minioEndpoint, "minio-endpoint", getEnv("MINIO_ENDPOINT", "minio-shared.tas-shared.svc.cluster.local:9000"), "MinIO endpoint")
 	flag.StringVar(&minioAccessKey, "minio-access-key", getEnv("MINIO_ACCESS_KEY", "minioadmin"), "MinIO access key")
 	flag.StringVar(&minioSecretKey, "minio-secret-key", getEnv("MINIO_SECRET_KEY", "minioadmin123"), "MinIO secret key")
 
@@ -69,6 +66,12 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "Failed to create MinIO client")
 		os.Exit(1)
+	}
+
+	// Set public URL for external-facing download links
+	if publicURL := getEnv("MINIO_PUBLIC_URL", ""); publicURL != "" {
+		mc.SetPublicURL(publicURL)
+		setupLog.Info("MinIO public URL configured", "url", publicURL)
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{

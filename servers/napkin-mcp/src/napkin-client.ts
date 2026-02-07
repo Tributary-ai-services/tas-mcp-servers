@@ -37,21 +37,40 @@ export class NapkinClient {
   }
 
   async submitVisual(request: NapkinVisualRequest): Promise<NapkinSubmitResponse> {
-    const response = await this.client.post("/v1/visual", {
+    const body: Record<string, any> = {
       content: request.content,
-      format: request.format,
-      style_id: request.style_id,
-      color_mode: request.color_mode,
-      language: request.language,
-      variations: request.variations,
-      context: request.context,
-    });
+      format: request.format || "svg",
+      language: request.language || "en-US",
+      number_of_visuals: request.number_of_visuals || 1,
+      transparent_background: request.transparent_background || false,
+      inverted_color: request.inverted_color || false,
+    };
+    if (request.style_id) body.style_id = request.style_id;
+    if (request.context_before) body.context_before = request.context_before;
+    if (request.context_after) body.context_after = request.context_after;
+    if (request.width) body.width = request.width;
+    if (request.height) body.height = request.height;
+
+    const response = await this.client.post("/v1/visual", body);
     return response.data;
+  }
+
+  getRequestId(resp: NapkinSubmitResponse): string {
+    return resp.id || resp.request_id || "";
   }
 
   async getVisualStatus(requestId: string): Promise<NapkinStatusResponse> {
     const response = await this.client.get(`/v1/visual/${requestId}/status`);
-    return response.data;
+    const data = response.data;
+
+    // Normalize file arrays: prefer generated_files > files > urls
+    if (!data.generated_files && data.files) {
+      data.generated_files = data.files;
+    } else if (!data.generated_files && !data.files && data.urls) {
+      data.generated_files = data.urls.map((u: string) => ({ url: u, id: "", format: "" }));
+    }
+
+    return data;
   }
 
   async waitForCompletion(requestId: string): Promise<NapkinStatusResponse> {
@@ -70,6 +89,10 @@ export class NapkinClient {
         throw new Error(`Napkin visual generation failed: ${status.error || "Unknown error"}`);
       }
 
+      if (status.status === "expired") {
+        throw new Error(`Napkin visual request expired for request ${requestId}`);
+      }
+
       await this.sleep(backoffMs);
       backoffMs = Math.min(backoffMs * 1.5, maxBackoff);
     }
@@ -79,8 +102,16 @@ export class NapkinClient {
     );
   }
 
+  async downloadFileById(requestId: string, fileId: string): Promise<Buffer> {
+    const response = await this.client.get(`/v1/visual/${requestId}/file/${fileId}`, {
+      responseType: "arraybuffer",
+      timeout: 60000,
+    });
+    return Buffer.from(response.data);
+  }
+
   async downloadFile(url: string): Promise<Buffer> {
-    const response = await axios.get(url, {
+    const response = await this.client.get(url, {
       responseType: "arraybuffer",
       timeout: 60000,
     });

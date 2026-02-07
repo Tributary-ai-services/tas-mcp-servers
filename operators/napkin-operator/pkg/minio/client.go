@@ -16,8 +16,9 @@ var tracer = otel.Tracer("minio-client")
 
 // Client is the MinIO storage client
 type Client struct {
-	client   *minio.Client
-	endpoint string
+	client    *minio.Client
+	endpoint  string
+	publicURL string // Public-facing base URL for generated links (e.g. "https://minio.tas.scharber.com")
 }
 
 // NewClient creates a new MinIO client
@@ -34,6 +35,12 @@ func NewClient(endpoint, accessKey, secretKey string, useSSL bool) (*Client, err
 		client:   client,
 		endpoint: endpoint,
 	}, nil
+}
+
+// SetPublicURL sets the public-facing URL used for generating download links.
+// If set, Upload() will return URLs using this base instead of the internal endpoint.
+func (c *Client) SetPublicURL(url string) {
+	c.publicURL = url
 }
 
 // EnsureBucket creates a bucket if it doesn't exist
@@ -81,8 +88,12 @@ func (c *Client) Upload(ctx context.Context, bucket, key string, data []byte, co
 		return "", fmt.Errorf("failed to upload to MinIO: %w", err)
 	}
 
-	protocol := "http"
-	url := fmt.Sprintf("%s://%s/%s/%s", protocol, c.endpoint, bucket, key)
+	var url string
+	if c.publicURL != "" {
+		url = fmt.Sprintf("%s/%s/%s", c.publicURL, bucket, key)
+	} else {
+		url = fmt.Sprintf("http://%s/%s/%s", c.endpoint, bucket, key)
+	}
 	return url, nil
 }
 

@@ -11,6 +11,7 @@ import { MinioUploadResult, MinioListResult } from "./types";
 
 const config = {
   endpoint: process.env.MINIO_ENDPOINT || "http://tas-minio-shared:9000",
+  publicUrl: process.env.MINIO_PUBLIC_URL || "", // Public-facing URL (e.g. "https://minio.tas.scharber.com")
   accessKey: process.env.MINIO_ACCESS_KEY || "minioadmin",
   secretKey: process.env.MINIO_SECRET_KEY || "minioadmin123",
   bucket: process.env.MINIO_BUCKET || "napkin-visuals",
@@ -67,7 +68,8 @@ export class MinioClient {
       })
     );
 
-    const url = `${config.endpoint}/${bucketName}/${key}`;
+    const baseUrl = config.publicUrl || config.endpoint;
+    const url = `${baseUrl}/${bucketName}/${key}`;
 
     return {
       bucket: bucketName,

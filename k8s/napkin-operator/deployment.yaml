@@ -20,7 +20,8 @@ spec:
       serviceAccountName: napkin-operator
       containers:
       - name: napkin-operator
-        image: tas-mcp/napkin-operator:1.0.0
+        image: registry-api.tas.scharber.com/napkin-operator:1.0.0
+        imagePullPolicy: Always
         args:
         - --metrics-bind-address=:8088
         - --health-probe-bind-address=:8089

@@ -13,52 +13,64 @@ export const NapkinStyleSchema = z.object({
 export type NapkinStyle = z.infer<typeof NapkinStyleSchema>;
 
 export const NapkinVisualRequestSchema = z.object({
-  content: z.string().min(1).max(50000).describe("Text content to visualize"),
-  format: z.enum(["svg", "png", "ppt"]).default("svg").describe("Output format"),
+  content: z.string().min(1).max(10000).describe("Text content to visualize"),
+  format: z.enum(["svg", "png"]).default("svg").describe("Output format"),
   style_id: z.string().optional().describe("Napkin AI style identifier"),
-  color_mode: z.enum(["light", "dark", "both"]).default("light").describe("Color mode"),
-  language: z.string().default("en").describe("Language code (BCP 47)"),
-  variations: z.number().int().min(1).max(5).default(1).describe("Number of variations"),
-  context: z.string().optional().describe("Additional context for generation"),
+  language: z.string().default("en-US").describe("Language code (BCP 47)"),
+  number_of_visuals: z.number().int().min(1).max(4).default(1).describe("Number of visuals to generate"),
+  context_before: z.string().max(5000).optional().describe("Context before the content"),
+  context_after: z.string().max(5000).optional().describe("Context after the content"),
+  transparent_background: z.boolean().default(false).describe("Use transparent background"),
+  inverted_color: z.boolean().default(false).describe("Use inverted/dark color mode"),
+  width: z.number().int().min(100).max(4096).optional().describe("PNG width"),
+  height: z.number().int().min(100).max(4096).optional().describe("PNG height"),
 });
 
 export type NapkinVisualRequest = z.infer<typeof NapkinVisualRequestSchema>;
 
 export interface NapkinSubmitResponse {
-  id: string;
+  id?: string;
+  request_id?: string;
   status: string;
   created_at: string;
 }
 
 export interface NapkinStatusResponse {
-  id: string;
-  status: "pending" | "processing" | "completed" | "failed";
+  status: "pending" | "processing" | "completed" | "failed" | "expired";
   progress?: number;
+  generated_files?: NapkinFileInfo[];
   files?: NapkinFileInfo[];
+  urls?: string[];
+  files_ready?: number;
+  files_total?: number;
   error?: string;
-  created_at: string;
-  completed_at?: string;
+  message?: string;
 }
 
 export interface NapkinFileInfo {
-  index: number;
+  id: string;
+  url?: string;
   format: string;
-  color_mode: string;
-  url: string;
+  filename?: string;
   size_bytes?: number;
-  expires_at?: string;
+  width?: number;
+  height?: number;
+  created_at?: string;
+  checksum?: string;
 }
 
 // --- MCP Tool Input Schemas ---
 
 export const GenerateVisualSchema = z.object({
-  content: z.string().min(1).max(50000).describe("Text content to visualize"),
-  format: z.enum(["svg", "png", "ppt"]).default("svg").describe("Output format (svg, png, or ppt)"),
+  content: z.string().min(1).max(10000).describe("Text content to visualize"),
+  format: z.enum(["svg", "png"]).default("svg").describe("Output format"),
   style_id: z.string().optional().describe("Napkin AI style identifier"),
-  color_mode: z.enum(["light", "dark", "both"]).default("light").describe("Color mode"),
-  language: z.string().default("en").describe("Language code (BCP 47)"),
-  variations: z.number().int().min(1).max(5).default(1).describe("Number of variations to generate"),
-  context: z.string().optional().describe("Additional context for generation"),
+  language: z.string().default("en-US").describe("Language code (BCP 47)"),
+  number_of_visuals: z.number().int().min(1).max(4).default(1).describe("Number of visuals to generate"),
+  context_before: z.string().max(5000).optional().describe("Context before the content"),
+  context_after: z.string().max(5000).optional().describe("Context after the content"),
+  transparent_background: z.boolean().default(false).describe("Use transparent background"),
+  inverted_color: z.boolean().default(false).describe("Use inverted/dark color mode"),
 });
 
 export const CheckVisualStatusSchema = z.object({
@@ -79,10 +91,10 @@ export const ListVisualsSchema = z.object({
 export const CreateNapkinVisualCRSchema = z.object({
   name: z.string().describe("Name for the NapkinVisual custom resource"),
   namespace: z.string().default("tas-mcp-servers").describe("Kubernetes namespace"),
-  content: z.string().min(1).max(50000).describe("Text content to visualize"),
-  format: z.enum(["svg", "png", "ppt"]).default("svg").describe("Output format"),
+  content: z.string().min(1).max(10000).describe("Text content to visualize"),
+  format: z.enum(["svg", "png"]).default("svg").describe("Output format"),
   style_id: z.string().optional().describe("Napkin AI style identifier"),
-  color_mode: z.enum(["light", "dark", "both"]).default("light").describe("Color mode"),
+  inverted_color: z.boolean().default(false).describe("Use inverted/dark color mode"),
 });
 
 // --- MinIO Types ---
@@ -105,10 +117,10 @@ export interface MinioListResult {
 // --- Generated Visual Result ---
 
 export interface GeneratedVisualFile {
-  index: number;
+  file_id: string;
   format: string;
-  color_mode: string;
-  napkin_url: string;
+  filename?: string;
+  napkin_url?: string;
   minio_key: string;
   minio_url: string;
   size_bytes: number;

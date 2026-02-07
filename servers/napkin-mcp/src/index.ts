@@ -54,337 +54,15 @@ const server = new Server(
   }
 );
 
-// List available tools
+// List available tools (shared between stdio and HTTP)
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [
-      {
-        name: "generate_visual",
-        description:
-          "Generate a visual from text using Napkin AI. Submits text content, waits for processing, downloads the result, and stores it permanently in MinIO. Returns the MinIO URL(s) for the generated visual(s).",
-        inputSchema: {
-          type: "object",
-          properties: {
-            content: {
-              type: "string",
-              description: "Text content to visualize (1-50000 characters)",
-              minLength: 1,
-              maxLength: 50000,
-            },
-            format: {
-              type: "string",
-              enum: ["svg", "png", "ppt"],
-              description: "Output format",
-              default: "svg",
-            },
-            style_id: {
-              type: "string",
-              description: "Napkin AI style identifier",
-            },
-            color_mode: {
-              type: "string",
-              enum: ["light", "dark", "both"],
-              description: "Color mode for the visual",
-              default: "light",
-            },
-            language: {
-              type: "string",
-              description: "Language code (BCP 47)",
-              default: "en",
-            },
-            variations: {
-              type: "number",
-              description: "Number of variations to generate (1-5)",
-              default: 1,
-              minimum: 1,
-              maximum: 5,
-            },
-            context: {
-              type: "string",
-              description: "Additional context for generation",
-            },
-          },
-          required: ["content"],
-        },
-      },
-      {
-        name: "check_visual_status",
-        description: "Check the status of a pending Napkin AI visual generation request",
-        inputSchema: {
-          type: "object",
-          properties: {
-            request_id: {
-              type: "string",
-              description: "Napkin AI request ID",
-            },
-          },
-          required: ["request_id"],
-        },
-      },
-      {
-        name: "download_visual",
-        description: "Download a generated visual from MinIO storage",
-        inputSchema: {
-          type: "object",
-          properties: {
-            minio_key: {
-              type: "string",
-              description: "MinIO object key for the visual",
-            },
-            bucket: {
-              type: "string",
-              description: "MinIO bucket name",
-              default: "napkin-visuals",
-            },
-          },
-          required: ["minio_key"],
-        },
-      },
-      {
-        name: "list_styles",
-        description: "List available Napkin AI visual styles",
-        inputSchema: {
-          type: "object",
-          properties: {},
-        },
-      },
-      {
-        name: "list_visuals",
-        description: "List generated visuals stored in MinIO",
-        inputSchema: {
-          type: "object",
-          properties: {
-            prefix: {
-              type: "string",
-              description: "Object key prefix to filter by",
-            },
-            bucket: {
-              type: "string",
-              description: "MinIO bucket name",
-              default: "napkin-visuals",
-            },
-            limit: {
-              type: "number",
-              description: "Maximum number of results (1-100)",
-              default: 20,
-              minimum: 1,
-              maximum: 100,
-            },
-          },
-        },
-      },
-      {
-        name: "create_napkin_visual_cr",
-        description:
-          "Create a NapkinVisual custom resource in Kubernetes for operator-managed visual generation",
-        inputSchema: {
-          type: "object",
-          properties: {
-            name: {
-              type: "string",
-              description: "Name for the NapkinVisual custom resource",
-            },
-            namespace: {
-              type: "string",
-              description: "Kubernetes namespace",
-              default: "tas-mcp-servers",
-            },
-            content: {
-              type: "string",
-              description: "Text content to visualize",
-            },
-            format: {
-              type: "string",
-              enum: ["svg", "png", "ppt"],
-              description: "Output format",
-              default: "svg",
-            },
-            style_id: {
-              type: "string",
-              description: "Napkin AI style identifier",
-            },
-            color_mode: {
-              type: "string",
-              enum: ["light", "dark", "both"],
-              description: "Color mode",
-              default: "light",
-            },
-          },
-          required: ["name", "content"],
-        },
-      },
-    ],
-  };
+  return { tools: getToolsList() };
 });
 
-// Handle tool calls
+// Handle tool calls (delegates to shared handleToolCall function)
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-
-  try {
-    switch (name) {
-      case "generate_visual": {
-        const parsed = GenerateVisualSchema.parse(args);
-        const startTime = Date.now();
-
-        // Submit visual generation request
-        const submission = await napkinClient.submitVisual(parsed);
-        const requestId = submission.id;
-
-        // Poll until complete
-        const completed = await napkinClient.waitForCompletion(requestId);
-
-        if (!completed.files || completed.files.length === 0) {
-          throw new Error("No files generated");
-        }
-
-        // Download each file and upload to MinIO
-        const generatedFiles: GeneratedVisualFile[] = [];
-        for (const file of completed.files) {
-          const data = await napkinClient.downloadFile(file.url);
-          const key = `visuals/${requestId}/${file.index}.${file.format}`;
-          const contentType = getContentType(file.format);
-          const uploaded = await minioClient.upload(key, data, contentType);
-
-          generatedFiles.push({
-            index: file.index,
-            format: file.format,
-            color_mode: file.color_mode,
-            napkin_url: file.url,
-            minio_key: uploaded.key,
-            minio_url: uploaded.url,
-            size_bytes: uploaded.size_bytes,
-          });
-        }
-
-        const result: GenerateVisualResult = {
-          request_id: requestId,
-          status: "completed",
-          files: generatedFiles,
-          total_time_ms: Date.now() - startTime,
-        };
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "check_visual_status": {
-        const parsed = CheckVisualStatusSchema.parse(args);
-        const status = await napkinClient.getVisualStatus(parsed.request_id);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(status, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "download_visual": {
-        const parsed = DownloadVisualSchema.parse(args);
-        const data = await minioClient.download(parsed.minio_key, parsed.bucket);
-        const base64 = data.toString("base64");
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                {
-                  key: parsed.minio_key,
-                  bucket: parsed.bucket,
-                  size_bytes: data.length,
-                  data_base64: base64,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-
-      case "list_styles": {
-        const styles = await napkinClient.listStyles();
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(styles, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "list_visuals": {
-        const parsed = ListVisualsSchema.parse(args);
-        const objects = await minioClient.list(parsed.prefix, parsed.bucket, parsed.limit);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(objects, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "create_napkin_visual_cr": {
-        const parsed = CreateNapkinVisualCRSchema.parse(args);
-        const cr = {
-          apiVersion: "napkin.tas.ai/v1",
-          kind: "NapkinVisual",
-          metadata: {
-            name: parsed.name,
-            namespace: parsed.namespace,
-          },
-          spec: {
-            content: parsed.content,
-            format: parsed.format,
-            style: {
-              styleId: parsed.style_id || "",
-              colorMode: parsed.color_mode,
-            },
-          },
-        };
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                {
-                  message:
-                    "NapkinVisual CR manifest generated. Apply with: kubectl apply -f <file>",
-                  manifest: cr,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-
-      default:
-        throw new Error(`Unknown tool: ${name}`);
-    }
-  } catch (error: any) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Error: ${error.message}`,
-        },
-      ],
-      isError: true,
-    };
-  }
+  return handleToolCall(name, args || {});
 });
 
 // List available resources
@@ -467,9 +145,201 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   }
 });
 
-// Health check HTTP server
+// Helper to read request body
+function readBody(req: http.IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => resolve(Buffer.concat(chunks).toString()));
+    req.on("error", reject);
+  });
+}
+
+// HTTP-based tool execution (reuses the same logic as stdio handler)
+async function handleToolCall(
+  name: string,
+  args: Record<string, any>
+): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
+  try {
+    switch (name) {
+      case "generate_visual": {
+        const parsed = GenerateVisualSchema.parse(args);
+        const startTime = Date.now();
+        const submission = await napkinClient.submitVisual(parsed);
+        const requestId = napkinClient.getRequestId(submission);
+        if (!requestId) {
+          throw new Error("No request ID returned from Napkin API");
+        }
+        const completed = await napkinClient.waitForCompletion(requestId);
+        const files = completed.generated_files || completed.files || [];
+        if (files.length === 0) {
+          throw new Error("No files generated");
+        }
+        const generatedFiles: GeneratedVisualFile[] = [];
+        for (const file of files) {
+          // Download via direct URL or by file ID
+          let data: Buffer;
+          if (file.url) {
+            data = await napkinClient.downloadFile(file.url);
+          } else if (file.id) {
+            data = await napkinClient.downloadFileById(requestId, file.id);
+          } else {
+            throw new Error("File has neither url nor id for download");
+          }
+          const fileId = file.id || `file_${generatedFiles.length}`;
+          const fmt = file.format || parsed.format || "svg";
+          const key = `visuals/${requestId}/${fileId}.${fmt}`;
+          const contentType = getContentType(fmt);
+          const uploaded = await minioClient.upload(key, data, contentType);
+          generatedFiles.push({
+            file_id: fileId,
+            format: fmt,
+            filename: file.filename,
+            napkin_url: file.url,
+            minio_key: uploaded.key,
+            minio_url: uploaded.url,
+            size_bytes: uploaded.size_bytes,
+          });
+        }
+        const result: GenerateVisualResult = {
+          request_id: requestId,
+          status: "completed",
+          files: generatedFiles,
+          total_time_ms: Date.now() - startTime,
+        };
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+      case "check_visual_status": {
+        const parsed = CheckVisualStatusSchema.parse(args);
+        const status = await napkinClient.getVisualStatus(parsed.request_id);
+        return { content: [{ type: "text", text: JSON.stringify(status, null, 2) }] };
+      }
+      case "download_visual": {
+        const parsed = DownloadVisualSchema.parse(args);
+        const data = await minioClient.download(parsed.minio_key, parsed.bucket);
+        const base64 = data.toString("base64");
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ key: parsed.minio_key, bucket: parsed.bucket, size_bytes: data.length, data_base64: base64 }, null, 2),
+            },
+          ],
+        };
+      }
+      case "list_styles": {
+        const styles = await napkinClient.listStyles();
+        return { content: [{ type: "text", text: JSON.stringify(styles, null, 2) }] };
+      }
+      case "list_visuals": {
+        const parsed = ListVisualsSchema.parse(args);
+        const objects = await minioClient.list(parsed.prefix, parsed.bucket, parsed.limit);
+        return { content: [{ type: "text", text: JSON.stringify(objects, null, 2) }] };
+      }
+      case "create_napkin_visual_cr": {
+        const parsed = CreateNapkinVisualCRSchema.parse(args);
+        const cr = {
+          apiVersion: "napkin.tas.ai/v1",
+          kind: "NapkinVisual",
+          metadata: { name: parsed.name, namespace: parsed.namespace },
+          spec: {
+            content: parsed.content,
+            format: parsed.format,
+            style: { styleId: parsed.style_id || "", invertedColor: parsed.inverted_color || false },
+          },
+        };
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ message: "NapkinVisual CR manifest generated. Apply with: kubectl apply -f <file>", manifest: cr }, null, 2),
+            },
+          ],
+        };
+      }
+      default:
+        throw new Error(`Unknown tool: ${name}`);
+    }
+  } catch (error: any) {
+    return { content: [{ type: "text", text: `Error: ${error.message}` }], isError: true };
+  }
+}
+
+// Get tools list (shared between stdio ListToolsRequestSchema and HTTP /mcp/tools/list)
+function getToolsList() {
+  return [
+    {
+      name: "generate_visual",
+      description: "Generate a visual from text using Napkin AI. Submits text content, waits for processing, downloads the result, and stores it permanently in MinIO.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          content: { type: "string", description: "Text content to visualize (1-10000 characters)" },
+          format: { type: "string", enum: ["svg", "png"], description: "Output format", default: "svg" },
+          style_id: { type: "string", description: "Napkin AI style identifier" },
+          language: { type: "string", description: "Language code (BCP 47)", default: "en-US" },
+          number_of_visuals: { type: "number", description: "Number of visuals to generate (1-4)", default: 1, minimum: 1, maximum: 4 },
+          context_before: { type: "string", description: "Context before the content (max 5000 chars)" },
+          context_after: { type: "string", description: "Context after the content (max 5000 chars)" },
+          transparent_background: { type: "boolean", description: "Use transparent background", default: false },
+          inverted_color: { type: "boolean", description: "Use inverted/dark color mode", default: false },
+        },
+        required: ["content"],
+      },
+    },
+    {
+      name: "check_visual_status",
+      description: "Check the status of a pending Napkin AI visual generation request",
+      inputSchema: { type: "object", properties: { request_id: { type: "string", description: "Napkin AI request ID" } }, required: ["request_id"] },
+    },
+    {
+      name: "download_visual",
+      description: "Download a generated visual from MinIO storage",
+      inputSchema: { type: "object", properties: { minio_key: { type: "string", description: "MinIO object key" }, bucket: { type: "string", description: "MinIO bucket", default: "napkin-visuals" } }, required: ["minio_key"] },
+    },
+    {
+      name: "list_styles",
+      description: "List available Napkin AI visual styles",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "list_visuals",
+      description: "List generated visuals stored in MinIO",
+      inputSchema: { type: "object", properties: { prefix: { type: "string", description: "Object key prefix" }, bucket: { type: "string", description: "MinIO bucket", default: "napkin-visuals" }, limit: { type: "number", description: "Max results (1-100)", default: 20 } } },
+    },
+    {
+      name: "create_napkin_visual_cr",
+      description: "Create a NapkinVisual Kubernetes custom resource for operator-managed generation",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "CR name" },
+          namespace: { type: "string", description: "K8s namespace", default: "tas-mcp-servers" },
+          content: { type: "string", description: "Text content to visualize" },
+          format: { type: "string", enum: ["svg", "png"], description: "Output format", default: "svg" },
+          style_id: { type: "string", description: "Style identifier" },
+          inverted_color: { type: "boolean", description: "Use inverted/dark color mode", default: false },
+        },
+        required: ["name", "content"],
+      },
+    },
+  ];
+}
+
+// Health check and HTTP API server
 function startHealthServer(): void {
-  const healthServer = http.createServer((req, res) => {
+  const healthServer = http.createServer(async (req, res) => {
+    // CORS headers
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
     if (req.url === "/health" && req.method === "GET") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
@@ -480,6 +350,20 @@ function startHealthServer(): void {
           timestamp: new Date().toISOString(),
         })
       );
+    } else if (req.url === "/mcp/tools/list" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ tools: getToolsList() }));
+    } else if (req.url === "/mcp/tools/call" && req.method === "POST") {
+      try {
+        const body = await readBody(req);
+        const { name, arguments: toolArgs } = JSON.parse(body);
+        const result = await handleToolCall(name, toolArgs || {});
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+      } catch (error: any) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: error.message }));
+      }
     } else {
       res.writeHead(404);
       res.end();
