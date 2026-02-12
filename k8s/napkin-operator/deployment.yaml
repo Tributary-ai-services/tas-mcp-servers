@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: napkin-operator
+  namespace: tas-mcp-servers
+  labels:
+    app: napkin-operator
+    component: operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: napkin-operator
+  template:
+    metadata:
+      labels:
+        app: napkin-operator
+        component: operator
+    spec:
+      serviceAccountName: napkin-operator
+      containers:
+      - name: napkin-operator
+        image: registry-api.tas.scharber.com/napkin-operator:1.0.0
+        imagePullPolicy: Always
+        args:
+        - --metrics-bind-address=:8088
+        - --health-probe-bind-address=:8089
+        - --leader-elect=false
+        ports:
+        - containerPort: 8088
+          name: metrics
+          protocol: TCP
+        - containerPort: 8089
+          name: health
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: napkin-operator-config
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8089
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8089
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
