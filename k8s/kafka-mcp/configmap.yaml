@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-mcp-config
+  namespace: tas-mcp-servers
+  labels:
+    app: kafka-mcp
+    component: mcp-server
+data:
+  KAFKA_BROKERS: "kafka-shared.tas-shared.svc.cluster.local:9092"
+  KAFKA_CLIENT_ID: "kafka-mcp-server"
+  MCP_TRANSPORT: "http"
+  MCP_HTTP_PORT: "8080"
