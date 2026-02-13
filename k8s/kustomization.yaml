@@ -6,14 +6,28 @@ metadata:
 
 resources:
   - namespace.yaml
+  # Existing servers
   - crawl4ai
   - napkin-mcp
   - napkin-operator
   - napkin-federation-init.yaml
+  # Wave 1 - Infrastructure MCP servers (native HTTP)
   - neo4j-mcp
   - minio-mcp
   - kafka-mcp
   - grafana-mcp
+  # Wave 2 - HTTP-native MCP servers
+  - brave-search-mcp
+  - firecrawl-mcp
+  - atlassian-mcp
+  # Wave 2 - Stdio servers via TAS MCP Bridge
+  - context7-mcp
+  - sequential-thinking-mcp
+  - perplexity-mcp
+  - slack-mcp
+  - paper-search-mcp
+  # Federation registration for Wave 2 servers
+  - federation-init-wave2.yaml
 
 commonLabels:
   project: tas
