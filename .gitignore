@@ -6,6 +6,7 @@
 *.so
 *.dylib
 bin/
+operators/napkin-operator/operator
 
 # Test coverage
 *.out
