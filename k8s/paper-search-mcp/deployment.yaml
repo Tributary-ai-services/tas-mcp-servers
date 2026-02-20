@@ -25,7 +25,7 @@ spec:
         - name: MCP_COMMAND
           value: "npx"
         - name: MCP_ARGS
-          value: "-y paper-search-mcp"
+          value: "-y paper-search-mcp-nodejs"
         - name: BRIDGE_PORT
           value: "8000"
         - name: BRIDGE_NAME

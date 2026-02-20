@@ -27,4 +27,4 @@ spec:
           service:
             name: kafka-mcp
             port:
-              number: 8080
+              number: 8000

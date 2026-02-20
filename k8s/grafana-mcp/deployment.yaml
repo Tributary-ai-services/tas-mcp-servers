@@ -19,35 +19,48 @@ spec:
     spec:
       containers:
       - name: grafana-mcp
-        image: grafana/mcp-grafana:latest
+        image: registry-api.tas.scharber.com/tas-mcp-bridge:1.0.0
         imagePullPolicy: Always
-        ports:
-        - containerPort: 8000
-          name: http
-          protocol: TCP
+        env:
+        - name: MCP_COMMAND
+          value: "npx"
+        - name: MCP_ARGS
+          value: "-y @leval/mcp-grafana"
+        - name: BRIDGE_PORT
+          value: "8000"
+        - name: BRIDGE_NAME
+          value: "grafana-mcp"
+        - name: BRIDGE_VERSION
+          value: "1.0.0"
         envFrom:
         - configMapRef:
             name: grafana-mcp-config
         - secretRef:
             name: grafana-mcp-secret
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
         resources:
           requests:
-            memory: "128Mi"
+            memory: "256Mi"
             cpu: "100m"
           limits:
-            memory: "256Mi"
+            memory: "512Mi"
             cpu: "500m"
         livenessProbe:
-          tcpSocket:
+          httpGet:
+            path: /health
             port: 8000
-          initialDelaySeconds: 30
+          initialDelaySeconds: 60
           periodSeconds: 30
           timeoutSeconds: 10
           failureThreshold: 3
         readinessProbe:
-          tcpSocket:
+          httpGet:
+            path: /health
             port: 8000
-          initialDelaySeconds: 15
+          initialDelaySeconds: 45
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3

@@ -23,7 +23,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import http from "http";
-import { spawn, ChildProcess } from "child_process";
 
 const BRIDGE_PORT = parseInt(process.env.BRIDGE_PORT || "8000", 10);
 const MCP_COMMAND = process.env.MCP_COMMAND;
@@ -33,7 +32,6 @@ const BRIDGE_VERSION = process.env.BRIDGE_VERSION || "1.0.0";
 
 let client: Client | null = null;
 let connected = false;
-let childProcess: ChildProcess | null = null;
 let reconnecting = false;
 
 // Build environment for child process - pass through all env vars
@@ -206,17 +204,11 @@ async function main() {
 // Handle graceful shutdown
 process.on("SIGTERM", () => {
   console.error("[bridge] Received SIGTERM, shutting down");
-  if (childProcess) {
-    childProcess.kill("SIGTERM");
-  }
   process.exit(0);
 });
 
 process.on("SIGINT", () => {
   console.error("[bridge] Received SIGINT, shutting down");
-  if (childProcess) {
-    childProcess.kill("SIGTERM");
-  }
   process.exit(0);
 });
 

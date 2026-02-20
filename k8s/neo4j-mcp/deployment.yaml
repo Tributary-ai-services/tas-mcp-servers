@@ -19,17 +19,28 @@ spec:
     spec:
       containers:
       - name: neo4j-mcp
-        image: mcp/neo4j-cypher:latest
+        image: registry-api.tas.scharber.com/tas-mcp-bridge:1.0.0
         imagePullPolicy: Always
-        ports:
-        - containerPort: 8000
-          name: http
-          protocol: TCP
+        env:
+        - name: MCP_COMMAND
+          value: "uvx"
+        - name: MCP_ARGS
+          value: "mcp-neo4j-cypher --transport stdio"
+        - name: BRIDGE_PORT
+          value: "8000"
+        - name: BRIDGE_NAME
+          value: "neo4j-mcp"
+        - name: BRIDGE_VERSION
+          value: "1.0.0"
         envFrom:
         - configMapRef:
             name: neo4j-mcp-config
         - secretRef:
             name: neo4j-mcp-secret
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
         resources:
           requests:
             memory: "256Mi"
@@ -39,17 +50,17 @@ spec:
             cpu: "500m"
         livenessProbe:
           httpGet:
-            path: /api/mcp/
+            path: /health
             port: 8000
-          initialDelaySeconds: 30
+          initialDelaySeconds: 90
           periodSeconds: 30
           timeoutSeconds: 10
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /api/mcp/
+            path: /health
             port: 8000
-          initialDelaySeconds: 15
+          initialDelaySeconds: 60
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3

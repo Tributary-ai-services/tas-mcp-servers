@@ -2,6 +2,7 @@
   "name": "@tas-mcp/http-bridge",
   "version": "1.0.0",
   "description": "Generic stdio-to-HTTP bridge for MCP servers. Wraps any stdio MCP server with TAS-compatible HTTP endpoints (/health, /mcp/tools/list, /mcp/tools/call).",
+  "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
