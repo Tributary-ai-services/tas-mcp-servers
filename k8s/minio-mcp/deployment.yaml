@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio-mcp
+  namespace: tas-mcp-servers
+  labels:
+    app: minio-mcp
+    component: mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio-mcp
+  template:
+    metadata:
+      labels:
+        app: minio-mcp
+        component: mcp-server
+    spec:
+      containers:
+      # Native MinIO MCP server with Streamable HTTP transport
+      - name: minio-mcp-native
+        image: quay.io/minio/aistor/mcp-server-aistor:latest
+        imagePullPolicy: Always
+        args:
+        - --http
+        - --http-port
+        - "8090"
+        - --allow-write
+        - --allow-admin
+        - --allowed-directories
+        - /tmp/downloads,/tmp/uploads
+        ports:
+        - containerPort: 8090
+          name: native-http
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: minio-mcp-config
+        - secretRef:
+            name: minio-mcp-secret
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          tcpSocket:
+            port: 8090
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: 8090
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      # Bridge wraps native Streamable HTTP with /mcp/tools/list and /mcp/tools/call
+      - name: minio-mcp-bridge
+        image: registry-api.tas.scharber.com/tas-mcp-bridge:1.0.0
+        imagePullPolicy: Always
+        env:
+        - name: MCP_COMMAND
+          value: "npx"
+        - name: MCP_ARGS
+          value: "-y mcp-remote http://localhost:8090/mcp"
+        - name: BRIDGE_PORT
+          value: "8000"
+        - name: BRIDGE_NAME
+          value: "minio-mcp"
+        - name: BRIDGE_VERSION
+          value: "1.0.0"
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3

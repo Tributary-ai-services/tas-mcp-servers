@@ -1,0 +1,119 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mcp-federation-init-wave2
+  namespace: tas-mcp-servers
+  labels:
+    app: mcp-federation-init-wave2
+    component: init-job
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: mcp-federation-init-wave2
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: federation-init
+        image: curlimages/curl:8.8.0
+        command:
+        - sh
+        - -c
+        - |
+          FEDERATION_URL="http://prod-tas-mcp-http.tas-mcp-prod.svc.cluster.local:8082/api/v1/federation/servers"
+          NS="tas-mcp-servers"
+
+          register_server() {
+            local name=$1 port=$2 desc=$3 category=$4 caps=$5 tags=$6
+            local endpoint="http://${name}.${NS}.svc.cluster.local:${port}"
+
+            echo "Waiting for ${name} to be healthy..."
+            for i in $(seq 1 20); do
+              if curl -sf "${endpoint}/health" > /dev/null 2>&1; then
+                echo "${name} is healthy"
+                break
+              fi
+              if [ "$i" = "20" ]; then
+                echo "WARNING: ${name} not healthy after 100s, registering anyway"
+              fi
+              sleep 5
+            done
+
+            echo "Registering ${name} with TAS MCP federation..."
+            curl -X POST "${FEDERATION_URL}" \
+              -H 'Content-Type: application/json' \
+              -d "{
+                \"id\": \"${name}-v1.0.0\",
+                \"name\": \"${desc}\",
+                \"description\": \"${desc}\",
+                \"version\": \"1.0.0\",
+                \"category\": \"${category}\",
+                \"endpoint\": \"${endpoint}\",
+                \"protocol\": \"http\",
+                \"auth\": { \"type\": \"none\", \"config\": {} },
+                \"capabilities\": [${caps}],
+                \"tags\": [${tags}],
+                \"health_check\": {
+                  \"enabled\": true,
+                  \"interval\": \"30s\",
+                  \"timeout\": \"10s\",
+                  \"path\": \"/health\"
+                }
+              }" && echo " -> Registration successful" || echo " -> Registration may have failed"
+            echo ""
+          }
+
+          # --- HTTP-native servers (Wave 1 additions) ---
+
+          register_server "brave-search-mcp" "8000" \
+            "Brave Search MCP Server" \
+            "search" \
+            '"brave_web_search", "brave_local_search"' \
+            '"search", "web", "brave", "privacy"'
+
+          register_server "firecrawl-mcp" "3000" \
+            "Firecrawl MCP Server" \
+            "web-scraping" \
+            '"scrape", "crawl", "map", "search"' \
+            '"web-scraping", "firecrawl", "crawling"'
+
+          register_server "atlassian-mcp" "9000" \
+            "Atlassian MCP Server (Jira + Confluence)" \
+            "productivity" \
+            '"confluence_search", "confluence_get_page", "jira_search", "jira_get_issue", "jira_create_issue"' \
+            '"atlassian", "jira", "confluence", "productivity"'
+
+          # --- TAS MCP Bridge servers (stdio wrapped) ---
+
+          register_server "context7-mcp" "8000" \
+            "Context7 MCP Server - Library Documentation" \
+            "documentation" \
+            '"resolve-library-id", "get-library-docs"' \
+            '"documentation", "context7", "libraries", "code-examples"'
+
+          register_server "sequential-thinking-mcp" "8000" \
+            "Sequential Thinking MCP Server" \
+            "reasoning" \
+            '"sequentialthinking"' \
+            '"reasoning", "thinking", "problem-solving", "analysis"'
+
+          register_server "perplexity-mcp" "8000" \
+            "Perplexity MCP Server - AI Search" \
+            "search" \
+            '"perplexity_ask"' \
+            '"search", "perplexity", "ai-search", "research"'
+
+          register_server "slack-mcp" "8000" \
+            "Slack MCP Server" \
+            "communication" \
+            '"slack_list_channels", "slack_post_message", "slack_reply_to_thread", "slack_search_messages"' \
+            '"slack", "communication", "messaging"'
+
+          register_server "paper-search-mcp" "8000" \
+            "Paper Search MCP Server - Academic Papers" \
+            "research" \
+            '"search_papers", "get_paper_details"' \
+            '"research", "papers", "academic", "arxiv"'
+
+          echo "=== Federation registration complete ==="

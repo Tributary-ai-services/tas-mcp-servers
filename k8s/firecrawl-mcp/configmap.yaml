@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: firecrawl-mcp-config
+  namespace: tas-mcp-servers
+data:
+  HTTP_STREAMABLE_SERVER: "true"
+  FIRECRAWL_RETRY_MAX_ATTEMPTS: "3"

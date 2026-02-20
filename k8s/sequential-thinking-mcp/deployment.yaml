@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sequential-thinking-mcp
+  namespace: tas-mcp-servers
+  labels:
+    app: sequential-thinking-mcp
+    component: mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sequential-thinking-mcp
+  template:
+    metadata:
+      labels:
+        app: sequential-thinking-mcp
+        component: mcp-server
+    spec:
+      containers:
+      - name: sequential-thinking-mcp
+        image: registry-api.tas.scharber.com/tas-mcp-bridge:1.0.0
+        imagePullPolicy: Always
+        env:
+        - name: MCP_COMMAND
+          value: "npx"
+        - name: MCP_ARGS
+          value: "-y @modelcontextprotocol/server-sequential-thinking"
+        - name: BRIDGE_PORT
+          value: "8000"
+        - name: BRIDGE_NAME
+          value: "sequential-thinking-mcp"
+        - name: BRIDGE_VERSION
+          value: "1.0.0"
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          failureThreshold: 3
