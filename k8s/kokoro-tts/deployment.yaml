@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kokoro-tts
+  namespace: tas-mcp-servers
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kokoro-tts
+  template:
+    metadata:
+      labels:
+        app: kokoro-tts
+        component: tts-engine
+    spec:
+      containers:
+      - name: kokoro-tts
+        image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8880
+          name: http
+        envFrom:
+        - configMapRef:
+            name: kokoro-tts-config
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /v1/audio/voices
+            port: 8880
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /v1/audio/voices
+            port: 8880
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 10
+        volumeMounts:
+        - name: model-cache
+          mountPath: /root/.cache
+      volumes:
+      - name: model-cache
+        emptyDir:
+          sizeLimit: 2Gi

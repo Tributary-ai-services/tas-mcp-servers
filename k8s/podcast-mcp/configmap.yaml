@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: podcast-mcp-config
+  namespace: tas-mcp-servers
+  labels:
+    app: podcast-mcp
+    component: mcp-server
+data:
+  MINIO_ENDPOINT: "http://minio-shared.tas-shared.svc.cluster.local:9000"
+  MINIO_PUBLIC_URL: "https://minio-api.tas.scharber.com"
+  MINIO_ASSETS_BUCKET: "podcast-assets"
+  MINIO_OUTPUT_BUCKET: "podcast-output"
+  HEALTH_PORT: "8092"
+  KOKORO_API_URL: "http://kokoro-tts.tas-mcp-servers.svc.cluster.local:8880"
+  TTS_CONCURRENCY: "3"
+  TTS_DELAY_MS: "500"
+  LOG_LEVEL: "info"

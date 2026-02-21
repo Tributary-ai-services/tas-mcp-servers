@@ -10,6 +10,8 @@ resources:
   - napkin-mcp
   - napkin-operator
   - napkin-federation-init.yaml
+  - podcast-mcp
+  - kokoro-tts
 
 commonLabels:
   project: tas
