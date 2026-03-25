@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: podcast-mcp
+  namespace: tas-mcp-servers
+  labels:
+    app: podcast-mcp
+    component: mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: podcast-mcp
+  template:
+    metadata:
+      labels:
+        app: podcast-mcp
+        component: mcp-server
+    spec:
+      containers:
+      - name: podcast-mcp
+        image: registry-api.tas.scharber.com/podcast-mcp-server:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8092
+          name: http
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: podcast-mcp-config
+        - secretRef:
+            name: podcast-mcp-secret
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8092
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8092
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        volumeMounts:
+        - name: tmp-dir
+          mountPath: /tmp/podcast-mcp
+      volumes:
+      - name: tmp-dir
+        emptyDir:
+          sizeLimit: 2Gi

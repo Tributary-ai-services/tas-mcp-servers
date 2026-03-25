@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: datasource-operator
+  namespace: tas-mcp-servers
+  labels:
+    app: datasource-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: datasource-operator
+  template:
+    metadata:
+      labels:
+        app: datasource-operator
+    spec:
+      serviceAccountName: datasource-operator
+      containers:
+        - name: operator
+          image: registry-api.tas.scharber.com/datasource-operator:1.0.0
+          imagePullPolicy: Always
+          args:
+            - --metrics-bind-address=:8088
+            - --health-probe-bind-address=:8089
+          ports:
+            - name: metrics
+              containerPort: 8088
+              protocol: TCP
+            - name: health
+              containerPort: 8089
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8089
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8089
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 200m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532

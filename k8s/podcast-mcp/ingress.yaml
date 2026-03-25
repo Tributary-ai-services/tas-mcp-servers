@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: podcast-mcp-ingress
+  namespace: tas-mcp-servers
+  annotations:
+    cert-manager.io/cluster-issuer: "tas-ca-issuer"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Extended timeouts for long-running TTS + FFmpeg processing
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "900"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "900"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - podcast-mcp.tas.scharber.com
+    secretName: podcast-mcp-tls
+  rules:
+  - host: podcast-mcp.tas.scharber.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: podcast-mcp
+            port:
+              number: 8092
