@@ -74,26 +74,45 @@ export class KokoroProvider implements TTSProvider {
   }
 
   async synthesize(options: TTSOptions): Promise<TTSResult> {
-    const response = await this.client.post(
-      "/v1/audio/speech",
-      {
-        model: "kokoro",
-        voice: options.voiceId,
-        input: options.text,
-        response_format: "mp3",
-        speed: options.speed ?? 1.0,
-      },
-      {
-        responseType: "arraybuffer",
-        headers: {
-          Accept: "audio/mpeg",
+    try {
+      const response = await this.client.post(
+        "/v1/audio/speech",
+        {
+          model: "kokoro",
+          voice: options.voiceId,
+          input: options.text,
+          response_format: "mp3",
+          speed: options.speed ?? 1.0,
         },
-      }
-    );
+        {
+          responseType: "arraybuffer",
+          headers: {
+            Accept: "audio/mpeg",
+          },
+        }
+      );
 
-    return {
-      audioBuffer: Buffer.from(response.data),
-      format: "mp3",
-    };
+      return {
+        audioBuffer: Buffer.from(response.data),
+        format: "mp3",
+      };
+    } catch (error: any) {
+      // Extract the actual error detail from the response body
+      let detail = error.message;
+      if (error.response) {
+        const status = error.response.status;
+        let body = "";
+        if (error.response.data instanceof ArrayBuffer || Buffer.isBuffer(error.response.data)) {
+          body = Buffer.from(error.response.data).toString("utf-8");
+        } else if (typeof error.response.data === "string") {
+          body = error.response.data;
+        }
+        detail = `Kokoro TTS returned ${status}: ${body}`;
+        console.error(`Kokoro synthesize failed [voice=${options.voiceId}, textLen=${options.text.length}]: ${detail}`);
+      } else {
+        console.error(`Kokoro synthesize failed [voice=${options.voiceId}, textLen=${options.text.length}]: ${detail}`);
+      }
+      throw new Error(detail);
+    }
   }
 }

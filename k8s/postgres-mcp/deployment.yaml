@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-mcp
+  namespace: tas-mcp-servers
+  labels:
+    app: postgres-mcp
+    component: mcp-server
+    service: postgres-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-mcp
+      service: postgres-mcp
+  template:
+    metadata:
+      labels:
+        app: postgres-mcp
+        component: mcp-server
+        service: postgres-mcp
+    spec:
+      containers:
+        - name: postgres-mcp
+          image: registry-api.tas.scharber.com/tas-mcp-bridge:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: MCP_COMMAND
+              value: "sh -c"
+            - name: MCP_ARGS
+              value: '["npx -y @modelcontextprotocol/server-postgres $DATABASE_URL"]'
+            - name: MCP_SERVER_TYPE
+              value: "postgres"
+            - name: BRIDGE_PORT
+              value: "8000"
+            - name: BRIDGE_NAME
+              value: "postgres-mcp"
+            - name: BRIDGE_VERSION
+              value: "1.0.0"
+          envFrom:
+            - configMapRef:
+                name: postgres-mcp-config
+            - secretRef:
+                name: postgres-mcp-secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
