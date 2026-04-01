@@ -52,23 +52,28 @@ function generateSilence(durationMs: number, outputPath: string): Promise<void> 
 
 function concatAudioFiles(files: string[], outputPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    // Use filter_complex concat to handle files with different stream parameters
-    const cmd = ffmpeg();
-    files.forEach((f) => cmd.input(f));
+    // Use the concat demuxer (file-list based) instead of filter_complex.
+    // filter_complex with 100+ inputs causes ffmpeg to hang or OOM.
+    const listPath = outputPath + ".list.txt";
+    const listContent = files.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join("\n");
+    fs.writeFileSync(listPath, listContent);
 
-    const filterParts = files.map((_, i) => `[${i}:a]`).join("");
-    const filterStr = `${filterParts}concat=n=${files.length}:v=0:a=1[out]`;
-
-    cmd
-      .complexFilter(filterStr)
-      .outputOptions(["-map", "[out]"])
+    ffmpeg()
+      .input(listPath)
+      .inputOptions(["-f", "concat", "-safe", "0"])
       .audioCodec("libmp3lame")
       .audioBitrate("192k")
       .audioFrequency(44100)
       .audioChannels(2)
       .output(outputPath)
-      .on("end", () => resolve())
-      .on("error", (err: Error) => reject(err))
+      .on("end", () => {
+        try { fs.unlinkSync(listPath); } catch (_) {}
+        resolve();
+      })
+      .on("error", (err: Error) => {
+        try { fs.unlinkSync(listPath); } catch (_) {}
+        reject(err);
+      })
       .run();
   });
 }

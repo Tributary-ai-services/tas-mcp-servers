@@ -30,9 +30,13 @@ import { BarkProvider } from "./providers/bark-provider";
 import { parseScript } from "./script-parser";
 import { assembleAudio, convertToMp3 } from "./audio-assembler";
 import { MinioClient } from "./minio-client";
+import { ProgressReporter } from "./progress-reporter";
+import { JobConsumer } from "./job-consumer";
+import { processSegment, SegmentResult } from "./segment-processor";
 
 const HEALTH_PORT = parseInt(process.env.HEALTH_PORT || "8092", 10);
-const TTS_CONCURRENCY = parseInt(process.env.TTS_CONCURRENCY || "3", 10);
+const TTS_CONCURRENCY = parseInt(process.env.TTS_CONCURRENCY || "2", 10);
+const SEGMENT_SIZE = parseInt(process.env.SEGMENT_SIZE || "12", 10);
 
 // Create clients
 const minioClient = new MinioClient();
@@ -82,30 +86,176 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Run TTS calls with limited concurrency and delay between calls
-async function runWithConcurrency<T>(
-  tasks: (() => Promise<T>)[],
-  concurrency: number
-): Promise<T[]> {
-  const results: T[] = new Array(tasks.length);
-  let nextIndex = 0;
+// Reusable podcast generation function (called by both HTTP handler and Kafka consumer)
+// Uses segmented processing: script is split into segments of SEGMENT_SIZE clips,
+// each segment is TTS-generated + assembled independently, then stitched at the end.
+// This bounds memory to ~SEGMENT_SIZE clips at a time instead of all clips.
+async function generatePodcast(params: {
+  script: string;
+  voice_mapping: Record<string, string>;
+  provider?: string;
+  title?: string;
+  config?: Record<string, any>;
+  progressReporter?: ProgressReporter;
+  heartbeat?: () => Promise<void>;
+}): Promise<PodcastGenerationResult> {
+  const startTime = Date.now();
+  const providerName = params.provider || "kokoro";
+  const provider = providerRegistry.get(providerName);
+  if (!provider) {
+    throw new Error(`Unknown TTS provider: ${providerName}`);
+  }
+  if (!provider.isAvailable()) {
+    throw new Error(`TTS provider ${providerName} is not configured`);
+  }
 
-  async function worker(): Promise<void> {
-    while (nextIndex < tasks.length) {
-      const idx = nextIndex++;
-      results[idx] = await tasks[idx]();
-      if (nextIndex < tasks.length && TTS_DELAY_MS > 0) {
-        await delay(TTS_DELAY_MS);
-      }
+  // Parse script
+  const parsed = parseScript(params.script);
+  if (parsed.lines.length === 0) {
+    throw new Error("Script contains no dialogue lines");
+  }
+
+  const cfg: PodcastConfig = {
+    ...DEFAULT_PODCAST_CONFIG,
+    silenceGapMs: params.config?.silence_gap_ms ?? DEFAULT_PODCAST_CONFIG.silenceGapMs,
+    introFadeDurationMs: params.config?.intro_fade_ms ?? DEFAULT_PODCAST_CONFIG.introFadeDurationMs,
+    outroFadeDurationMs: params.config?.outro_fade_ms ?? DEFAULT_PODCAST_CONFIG.outroFadeDurationMs,
+    ambientVolume: params.config?.ambient_volume ?? DEFAULT_PODCAST_CONFIG.ambientVolume,
+    outputFormat: params.config?.output_format ?? DEFAULT_PODCAST_CONFIG.outputFormat,
+    outputBitrate: params.config?.output_bitrate ?? DEFAULT_PODCAST_CONFIG.outputBitrate,
+    ttsConcurrency: TTS_CONCURRENCY,
+  };
+
+  const totalClips = parsed.lines.length;
+
+  // Split script lines into segments
+  const segments: typeof parsed.lines[] = [];
+  for (let i = 0; i < parsed.lines.length; i += SEGMENT_SIZE) {
+    segments.push(parsed.lines.slice(i, i + SEGMENT_SIZE));
+  }
+
+  console.error(`[generatePodcast] ${totalClips} clips split into ${segments.length} segments of ~${SEGMENT_SIZE}`);
+
+  // Report initial progress
+  if (params.progressReporter) {
+    await params.progressReporter.updateProgress({
+      phase: "tts_generating",
+      clips_total: totalClips,
+      clips_completed: 0,
+      message: `Starting: ${totalClips} clips in ${segments.length} segments`,
+    });
+  }
+
+  // Process segments sequentially — each segment generates TTS, assembles, then frees memory
+  const segmentResults: SegmentResult[] = [];
+  let globalClipsCompleted = 0;
+
+  for (let i = 0; i < segments.length; i++) {
+    const result = await processSegment({
+      lines: segments[i],
+      segmentIndex: i,
+      totalSegments: segments.length,
+      voiceMapping: params.voice_mapping,
+      provider,
+      providerName,
+      config: cfg,
+      progressReporter: params.progressReporter,
+      globalClipOffset: globalClipsCompleted,
+      totalClipsOverall: totalClips,
+    });
+
+    globalClipsCompleted += result.clipsGenerated;
+    segmentResults.push(result);
+
+    console.error(`[generatePodcast] Segment ${i + 1}/${segments.length} done (${globalClipsCompleted}/${totalClips} clips)`);
+
+    // Send Kafka heartbeat between segments to prevent consumer group eviction
+    if (params.heartbeat) {
+      try { await params.heartbeat(); } catch (_) {}
     }
   }
 
-  const workers: Promise<void>[] = [];
-  for (let i = 0; i < Math.min(concurrency, tasks.length); i++) {
-    workers.push(worker());
+  // Report stitching phase
+  if (params.progressReporter) {
+    await params.progressReporter.updateProgress({
+      phase: "assembling",
+      clips_total: totalClips,
+      clips_completed: globalClipsCompleted,
+      message: `Stitching ${segments.length} segments with intro/outro...`,
+    });
   }
-  await Promise.all(workers);
-  return results;
+
+  // Download music assets from MinIO if specified
+  let introPath: string | undefined;
+  let outroPath: string | undefined;
+  let ambientPath: string | undefined;
+  const musicDir = path.join(process.env.TEMP_DIR || "/tmp/podcast-mcp", "music", uuidv4());
+  fs.mkdirSync(musicDir, { recursive: true });
+
+  if (params.config?.intro_music_key) {
+    const buf = await minioClient.download(params.config.intro_music_key, minioClient.getAssetsBucket());
+    introPath = path.join(musicDir, "intro.mp3");
+    fs.writeFileSync(introPath, buf);
+  }
+  if (params.config?.outro_music_key) {
+    const buf = await minioClient.download(params.config.outro_music_key, minioClient.getAssetsBucket());
+    outroPath = path.join(musicDir, "outro.mp3");
+    fs.writeFileSync(outroPath, buf);
+  }
+  if (params.config?.ambient_music_key) {
+    const buf = await minioClient.download(params.config.ambient_music_key, minioClient.getAssetsBucket());
+    ambientPath = path.join(musicDir, "ambient.mp3");
+    fs.writeFileSync(ambientPath, buf);
+  }
+
+  // Final stitch: assemble segment files (no silence between them — already baked in)
+  const finalBuffer = await assembleAudio({
+    clipPaths: segmentResults.map((s) => s.localPath),
+    introPath,
+    outroPath,
+    ambientPath,
+    config: { ...cfg, silenceGapMs: 0 }, // segments already have internal silence
+  });
+
+  // Report uploading phase
+  if (params.progressReporter) {
+    await params.progressReporter.updateProgress({
+      phase: "uploading",
+      clips_total: totalClips,
+      clips_completed: globalClipsCompleted,
+      message: "Uploading final podcast to MinIO...",
+    });
+  }
+
+  // Upload final podcast
+  const titleSlug = (params.title || "podcast").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const outputKey = `podcasts/${titleSlug}-${uuidv4()}.mp3`;
+  const uploaded = await minioClient.upload(outputKey, finalBuffer, "audio/mpeg");
+
+  // Cleanup temp files
+  for (const seg of segmentResults) {
+    try { fs.unlinkSync(seg.localPath); } catch (_) {}
+    // Also cleanup the segment directory
+    try { fs.rmSync(path.dirname(seg.localPath), { recursive: true, force: true }); } catch (_) {}
+  }
+  try { fs.rmSync(musicDir, { recursive: true, force: true }); } catch (_) {}
+
+  const totalTimeMs = Date.now() - startTime;
+  const durationEstimateMs = Math.round((finalBuffer.length / (192000 / 8)) * 1000);
+
+  return {
+    podcast_url: uploaded.url,
+    minio_key: uploaded.key,
+    duration_estimate_ms: durationEstimateMs,
+    total_lines: totalClips,
+    speakers: parsed.speakers,
+    provider: providerName,
+    clips_generated: globalClipsCompleted,
+    has_intro: !!introPath,
+    has_outro: !!outroPath,
+    has_ambient: !!ambientPath,
+    total_time_ms: totalTimeMs,
+  };
 }
 
 // Shared tool handler
@@ -163,118 +313,13 @@ async function handleToolCall(
 
       case "generate_podcast": {
         const parsed = GeneratePodcastSchema.parse(args);
-        const startTime = Date.now();
-        const provider = providerRegistry.get(parsed.provider);
-        if (!provider) {
-          throw new Error(`Unknown TTS provider: ${parsed.provider}`);
-        }
-        if (!provider.isAvailable()) {
-          throw new Error(`TTS provider ${parsed.provider} is not configured (missing API key)`);
-        }
-
-        // Parse the script
-        const script = parseScript(parsed.script);
-        if (script.totalLines === 0) {
-          throw new Error("Script contains no dialogue lines");
-        }
-
-        // Validate voice mapping
-        const missingVoices = script.speakers.filter((s) => !parsed.voice_mapping[s]);
-        if (missingVoices.length > 0) {
-          throw new Error(`Missing voice mapping for speakers: ${missingVoices.join(", ")}`);
-        }
-
-        // Build config
-        const podcastConfig: PodcastConfig = {
-          ...DEFAULT_PODCAST_CONFIG,
-          ...(parsed.config?.silence_gap_ms !== undefined && { silenceGapMs: parsed.config.silence_gap_ms }),
-          ...(parsed.config?.intro_fade_ms !== undefined && { introFadeDurationMs: parsed.config.intro_fade_ms }),
-          ...(parsed.config?.outro_fade_ms !== undefined && { outroFadeDurationMs: parsed.config.outro_fade_ms }),
-          ...(parsed.config?.ambient_volume !== undefined && { ambientVolume: parsed.config.ambient_volume }),
-          ...(parsed.config?.output_format !== undefined && { outputFormat: parsed.config.output_format }),
-          ...(parsed.config?.output_bitrate !== undefined && { outputBitrate: parsed.config.output_bitrate }),
-        };
-
-        // Generate TTS for all lines with concurrency limit
-        const tempDir = `/tmp/podcast-mcp/${uuidv4()}`;
-        fs.mkdirSync(tempDir, { recursive: true });
-
-        const ttsTasks = script.lines.map((line, idx) => {
-          return async () => {
-            const result = await provider.synthesize({
-              provider: parsed.provider,
-              voiceId: parsed.voice_mapping[line.speaker],
-              text: line.dialogue,
-            });
-
-            let audioBuffer = result.audioBuffer;
-            if (result.format !== "mp3") {
-              audioBuffer = await convertToMp3(audioBuffer, result.format);
-            }
-
-            const clipPath = path.join(tempDir, `clip_${String(idx).padStart(4, "0")}.mp3`);
-            fs.writeFileSync(clipPath, audioBuffer);
-            return clipPath;
-          };
-        });
-
-        console.error(`Generating ${ttsTasks.length} TTS clips with concurrency ${TTS_CONCURRENCY}...`);
-        const clipPaths = await runWithConcurrency(ttsTasks, TTS_CONCURRENCY);
-
-        // Download music assets if provided
-        let introPath: string | undefined;
-        let outroPath: string | undefined;
-        let ambientPath: string | undefined;
-
-        if (parsed.config?.intro_music_key) {
-          const data = await minioClient.download(parsed.config.intro_music_key, minioClient.getAssetsBucket());
-          introPath = path.join(tempDir, "intro.mp3");
-          fs.writeFileSync(introPath, data);
-        }
-        if (parsed.config?.outro_music_key) {
-          const data = await minioClient.download(parsed.config.outro_music_key, minioClient.getAssetsBucket());
-          outroPath = path.join(tempDir, "outro.mp3");
-          fs.writeFileSync(outroPath, data);
-        }
-        if (parsed.config?.ambient_music_key) {
-          const data = await minioClient.download(parsed.config.ambient_music_key, minioClient.getAssetsBucket());
-          ambientPath = path.join(tempDir, "ambient.mp3");
-          fs.writeFileSync(ambientPath, data);
-        }
-
-        // Assemble the podcast
-        console.error("Assembling podcast audio...");
-        const finalAudio = await assembleAudio({
-          clipPaths,
-          introPath,
-          outroPath,
-          ambientPath,
-          config: podcastConfig,
-        });
-
-        // Upload final podcast
-        const slug = (parsed.title || "podcast").toLowerCase().replace(/[^a-z0-9]+/g, "-");
-        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        const podcastKey = `podcasts/${slug}-${timestamp}.mp3`;
-        const uploaded = await minioClient.upload(podcastKey, finalAudio, "audio/mpeg");
-
-        // Cleanup temp
-        try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (_) {}
-
-        const result: PodcastGenerationResult = {
-          podcast_url: uploaded.url,
-          minio_key: uploaded.key,
-          duration_estimate_ms: script.totalLines * 3000 + (script.totalLines - 1) * podcastConfig.silenceGapMs,
-          total_lines: script.totalLines,
-          speakers: script.speakers,
+        const result = await generatePodcast({
+          script: parsed.script,
+          voice_mapping: parsed.voice_mapping,
           provider: parsed.provider,
-          clips_generated: clipPaths.length,
-          has_intro: !!introPath,
-          has_outro: !!outroPath,
-          has_ambient: !!ambientPath,
-          total_time_ms: Date.now() - startTime,
-        };
-
+          title: parsed.title,
+          config: parsed.config,
+        });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
 
@@ -479,9 +524,24 @@ function startHealthServer(): void {
 async function main() {
   startHealthServer();
 
+  // Start Kafka job consumer (non-blocking — logs warning if Kafka unavailable)
+  const jobConsumer = new JobConsumer(generatePodcast);
+  jobConsumer.start().catch((err) => {
+    console.error(`JobConsumer failed to start: ${err.message}`);
+  });
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Podcast MCP server running on stdio");
+
+  // Graceful shutdown
+  const shutdown = async () => {
+    console.error("Shutting down...");
+    await jobConsumer.stop();
+    process.exit(0);
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 }
 
 main().catch((error) => {

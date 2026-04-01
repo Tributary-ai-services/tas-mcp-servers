@@ -74,45 +74,78 @@ export class KokoroProvider implements TTSProvider {
   }
 
   async synthesize(options: TTSOptions): Promise<TTSResult> {
-    try {
-      const response = await this.client.post(
-        "/v1/audio/speech",
-        {
-          model: "kokoro",
-          voice: options.voiceId,
-          input: options.text,
-          response_format: "mp3",
-          speed: options.speed ?? 1.0,
-        },
-        {
-          responseType: "arraybuffer",
-          headers: {
-            Accept: "audio/mpeg",
-          },
-        }
-      );
+    return this.synthesizeWithRetry(options, 3);
+  }
 
-      return {
-        audioBuffer: Buffer.from(response.data),
-        format: "mp3",
-      };
-    } catch (error: any) {
-      // Extract the actual error detail from the response body
-      let detail = error.message;
-      if (error.response) {
-        const status = error.response.status;
-        let body = "";
-        if (error.response.data instanceof ArrayBuffer || Buffer.isBuffer(error.response.data)) {
-          body = Buffer.from(error.response.data).toString("utf-8");
-        } else if (typeof error.response.data === "string") {
-          body = error.response.data;
+  /**
+   * Synthesize with exponential backoff retry for transient errors
+   * (timeout, 503, ECONNREFUSED)
+   */
+  async synthesizeWithRetry(options: TTSOptions, retries: number): Promise<TTSResult> {
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const response = await this.client.post(
+          "/v1/audio/speech",
+          {
+            model: "kokoro",
+            voice: options.voiceId,
+            input: options.text,
+            response_format: "mp3",
+            speed: options.speed ?? 1.0,
+          },
+          {
+            responseType: "arraybuffer",
+            headers: {
+              Accept: "audio/mpeg",
+            },
+          }
+        );
+
+        return {
+          audioBuffer: Buffer.from(response.data),
+          format: "mp3",
+        };
+      } catch (error: any) {
+        const isRetryable = this.isRetryableError(error);
+        const isLastAttempt = attempt === retries - 1;
+
+        // Extract the actual error detail from the response body
+        let detail = error.message;
+        if (error.response) {
+          const status = error.response.status;
+          let body = "";
+          if (error.response.data instanceof ArrayBuffer || Buffer.isBuffer(error.response.data)) {
+            body = Buffer.from(error.response.data).toString("utf-8");
+          } else if (typeof error.response.data === "string") {
+            body = error.response.data;
+          }
+          detail = `Kokoro TTS returned ${status}: ${body}`;
         }
-        detail = `Kokoro TTS returned ${status}: ${body}`;
+
+        if (isRetryable && !isLastAttempt) {
+          const delayMs = 2000 * Math.pow(2, attempt); // 2s, 4s, 8s
+          console.error(`Kokoro synthesize attempt ${attempt + 1}/${retries} failed (retrying in ${delayMs}ms): ${detail}`);
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          continue;
+        }
+
         console.error(`Kokoro synthesize failed [voice=${options.voiceId}, textLen=${options.text.length}]: ${detail}`);
-      } else {
-        console.error(`Kokoro synthesize failed [voice=${options.voiceId}, textLen=${options.text.length}]: ${detail}`);
+        throw new Error(detail);
       }
-      throw new Error(detail);
     }
+
+    // Should never reach here
+    throw new Error("Kokoro synthesize failed: exhausted retries");
+  }
+
+  private isRetryableError(error: any): boolean {
+    if (error.code === "ECONNREFUSED" || error.code === "ECONNRESET" || error.code === "ETIMEDOUT") {
+      return true;
+    }
+    if (error.response) {
+      const status = error.response.status;
+      return status === 503 || status === 429 || status === 502 || status === 504;
+    }
+    return false;
   }
 }
