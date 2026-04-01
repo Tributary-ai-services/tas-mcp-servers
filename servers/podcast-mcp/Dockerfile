@@ -34,11 +34,12 @@ ENV MINIO_ASSETS_BUCKET=podcast-assets
 ENV MINIO_OUTPUT_BUCKET=podcast-output
 ENV KOKORO_API_URL=http://kokoro-tts.tas-mcp-servers.svc.cluster.local:8880
 ENV HEALTH_PORT=8092
-ENV TTS_CONCURRENCY=3
+ENV TTS_CONCURRENCY=2
+ENV SEGMENT_SIZE=12
 
 EXPOSE 8092
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
   CMD wget --spider -q http://localhost:8092/health || exit 1
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "--expose-gc", "dist/index.js"]
