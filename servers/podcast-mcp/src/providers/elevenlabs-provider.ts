@@ -6,19 +6,13 @@ const ELEVENLABS_API_URL = process.env.ELEVENLABS_API_URL || "https://api.eleven
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || "";
 const ELEVENLABS_MODEL = process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2";
 
-// Default voices available on all ElevenLabs accounts (pre-made voices)
+// Default voices available on ElevenLabs free tier (verified 2026-04-01)
 const DEFAULT_VOICES: Voice[] = [
-  { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", provider: "elevenlabs", gender: "female", description: "Calm, young, American" },
-  { id: "AZnzlk1XvdvUeBnXmlld", name: "Domi", provider: "elevenlabs", gender: "female", description: "Strong, young, American" },
   { id: "EXAVITQu4vr4xnSDxMaL", name: "Bella", provider: "elevenlabs", gender: "female", description: "Soft, young, American" },
   { id: "ErXwobaYiN019PkySvjV", name: "Antoni", provider: "elevenlabs", gender: "male", description: "Well-rounded, young, American" },
-  { id: "MF3mGyEYCl7XYWbV9V6O", name: "Elli", provider: "elevenlabs", gender: "female", description: "Emotional, young, American" },
-  { id: "TxGEqnHWrfWFTfGW9XjX", name: "Josh", provider: "elevenlabs", gender: "male", description: "Deep, young, American" },
   { id: "VR6AewLTigWG4xSOukaG", name: "Arnold", provider: "elevenlabs", gender: "male", description: "Crisp, middle-aged, American" },
   { id: "pNInz6obpgDQGcFmaJgB", name: "Adam", provider: "elevenlabs", gender: "male", description: "Deep, middle-aged, American" },
-  { id: "yoZ06aMxZJJ28mfd3POQ", name: "Sam", provider: "elevenlabs", gender: "male", description: "Raspy, young, American" },
   { id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", provider: "elevenlabs", gender: "male", description: "Deep, authoritative, British" },
-  { id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", provider: "elevenlabs", gender: "female", description: "Seductive, middle-aged, Swedish" },
   { id: "Xb7hH8MSUJpSbSDYk0k2", name: "Alice", provider: "elevenlabs", gender: "female", description: "Confident, middle-aged, British" },
 ];
 
