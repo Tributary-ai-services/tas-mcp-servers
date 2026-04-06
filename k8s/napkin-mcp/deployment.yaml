@@ -30,13 +30,7 @@ spec:
             name: napkin-mcp-config
         - secretRef:
             name: napkin-mcp-secret
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
+        # Resources removed — BestEffort QoS until profiled via Prometheus/Grafana
         livenessProbe:
           httpGet:
             path: /health

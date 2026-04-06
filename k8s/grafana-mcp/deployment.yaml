@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana-mcp
+  namespace: tas-mcp-servers
+  labels:
+    app: grafana-mcp
+    component: mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana-mcp
+      project: tas
+      service: grafana-mcp
+      tier: mcp-servers
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: grafana-mcp
+        component: mcp-server
+        project: tas
+        service: grafana-mcp
+        tier: mcp-servers
+    spec:
+      containers:
+      - name: grafana-mcp
+        image: registry-api.tas.scharber.com/tas-mcp-bridge:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        env:
+        - name: MCP_COMMAND
+          value: npx
+        - name: MCP_ARGS
+          value: '["-y", "@leval/mcp-grafana"]'
+        - name: BRIDGE_PORT
+          value: "8000"
+        - name: BRIDGE_NAME
+          value: grafana-mcp
+        - name: BRIDGE_VERSION
+          value: "1.0.0"
+        envFrom:
+        - configMapRef:
+            name: grafana-mcp-config
+        - secretRef:
+            name: grafana-mcp-secret
+        resources: {}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          timeoutSeconds: 5

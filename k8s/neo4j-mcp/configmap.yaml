@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: neo4j-mcp-config
+  namespace: tas-mcp-servers
+  labels:
+    app: neo4j-mcp
+    component: mcp-server
+data:
+  NEO4J_DATABASE: neo4j
+  NEO4J_URI: bolt+ssc://neo4j.aether-be.svc.cluster.local:7687

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: context7-mcp
+  namespace: tas-mcp-servers
+  labels:
+    app: context7-mcp
+    component: mcp-server
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8000
+    protocol: TCP
+    targetPort: 8000
+  selector:
+    app: context7-mcp
+    project: tas
+    service: context7-mcp
+    tier: mcp-servers

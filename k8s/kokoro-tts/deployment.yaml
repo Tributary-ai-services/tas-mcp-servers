@@ -24,13 +24,7 @@ spec:
         envFrom:
         - configMapRef:
             name: kokoro-tts-config
-        resources:
-          requests:
-            memory: "2Gi"
-            cpu: "1000m"
-          limits:
-            memory: "4Gi"
-            cpu: "2000m"
+        # Resources removed — BestEffort QoS until profiled via Prometheus/Grafana
         livenessProbe:
           httpGet:
             path: /v1/audio/voices

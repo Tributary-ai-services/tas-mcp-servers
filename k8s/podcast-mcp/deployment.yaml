@@ -30,13 +30,7 @@ spec:
             name: podcast-mcp-config
         - secretRef:
             name: podcast-mcp-secret
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "250m"
-          limits:
-            memory: "1Gi"
-            cpu: "1000m"
+        # Resources removed — BestEffort QoS until profiled via Prometheus/Grafana
         livenessProbe:
           httpGet:
             path: /health

@@ -27,13 +27,7 @@ spec:
         envFrom:
         - configMapRef:
             name: crawl4ai-config
-        resources:
-          requests:
-            memory: "2Gi"
-            cpu: "500m"
-          limits:
-            memory: "4Gi"
-            cpu: "2000m"
+        # Resources removed — BestEffort QoS until profiled via Prometheus/Grafana
         volumeMounts:
         - name: shm
           mountPath: /dev/shm

@@ -6,12 +6,20 @@ metadata:
 
 resources:
   - namespace.yaml
+  - assembler-mcp
+  - context7-mcp
   - crawl4ai
+  - grafana-mcp
+  - kafka-mcp
+  - kokoro-tts
+  - minio-mcp
   - napkin-mcp
   - napkin-operator
   - napkin-federation-init.yaml
+  - neo4j-mcp
+  - paper-search-mcp
   - podcast-mcp
-  - kokoro-tts
+  - sequential-thinking-mcp
 
 commonLabels:
   project: tas
