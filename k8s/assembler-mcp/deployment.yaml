@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: assembler-mcp
+  namespace: tas-mcp-servers
+  labels:
+    app: assembler-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: assembler-mcp
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: assembler-mcp
+    spec:
+      containers:
+      - name: assembler-mcp
+        image: registry-api.tas.scharber.com/assembler-mcp:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8091
+          name: http
+          protocol: TCP
+        env:
+        - name: PORT
+          value: "8091"
+        - name: TEMPLATES_DIR
+          value: /app/templates
+        envFrom:
+        - configMapRef:
+            name: assembler-mcp-config
+        - secretRef:
+            name: assembler-mcp-secret
+            optional: true
+        resources: {}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 3
+          periodSeconds: 10

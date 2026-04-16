@@ -42,13 +42,7 @@ spec:
               port: 8089
             initialDelaySeconds: 5
             periodSeconds: 10
-          resources:
-            limits:
-              cpu: 200m
-              memory: 128Mi
-            requests:
-              cpu: 50m
-              memory: 64Mi
+          # Resources removed — BestEffort QoS until profiled via Prometheus/Grafana
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

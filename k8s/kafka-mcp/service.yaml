@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-mcp
+  namespace: tas-mcp-servers
+  labels:
+    app: kafka-mcp
+    component: mcp-server
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8000
+    protocol: TCP
+    targetPort: 8000
+  selector:
+    app: kafka-mcp
+    project: tas
+    service: kafka-mcp
+    tier: mcp-servers

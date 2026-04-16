@@ -46,13 +46,7 @@ spec:
                 name: postgres-mcp-config
             - secretRef:
                 name: postgres-mcp-secret
-          resources:
-            requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
+          # Resources removed — BestEffort QoS until profiled via Prometheus/Grafana
           livenessProbe:
             httpGet:
               path: /health

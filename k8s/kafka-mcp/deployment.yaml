@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-mcp
+  namespace: tas-mcp-servers
+  labels:
+    app: kafka-mcp
+    component: mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-mcp
+      project: tas
+      service: kafka-mcp
+      tier: mcp-servers
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: kafka-mcp
+        component: mcp-server
+        project: tas
+        service: kafka-mcp
+        tier: mcp-servers
+    spec:
+      containers:
+      - name: kafka-mcp-native
+        image: registry-api.tas.scharber.com/kafka-mcp-native:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: native-http
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: kafka-mcp-config
+        resources: {}
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+      - name: kafka-mcp-bridge
+        image: registry-api.tas.scharber.com/tas-mcp-bridge:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        env:
+        - name: MCP_ARGS
+          value: "[]"
+        - name: BRIDGE_PORT
+          value: "8000"
+        - name: BRIDGE_NAME
+          value: kafka-mcp
+        - name: BRIDGE_VERSION
+          value: "1.0.0"
+        - name: MCP_HTTP_UPSTREAM
+          value: http://localhost:8080/mcp
+        - name: MCP_SERVER_TYPE
+          value: kafka
+        resources: {}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          timeoutSeconds: 5

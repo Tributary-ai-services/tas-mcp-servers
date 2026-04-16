@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: paper-search-mcp
+  namespace: tas-mcp-servers
+  labels:
+    app: paper-search-mcp
+    component: mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: paper-search-mcp
+      project: tas
+      service: paper-search-mcp
+      tier: mcp-servers
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: paper-search-mcp
+        component: mcp-server
+        project: tas
+        service: paper-search-mcp
+        tier: mcp-servers
+    spec:
+      containers:
+      - name: paper-search-mcp
+        image: registry-api.tas.scharber.com/tas-mcp-bridge:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        env:
+        - name: MCP_COMMAND
+          value: npx
+        - name: MCP_ARGS
+          value: '["-y", "paper-search-mcp-nodejs"]'
+        - name: BRIDGE_PORT
+          value: "8000"
+        - name: BRIDGE_NAME
+          value: paper-search-mcp
+        - name: BRIDGE_VERSION
+          value: "1.0.0"
+        resources: {}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 45
+          periodSeconds: 10

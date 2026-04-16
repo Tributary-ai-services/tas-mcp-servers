@@ -36,13 +36,7 @@ spec:
         envFrom:
         - configMapRef:
             name: napkin-operator-config
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "250m"
+        # Resources removed — BestEffort QoS until profiled via Prometheus/Grafana
         livenessProbe:
           httpGet:
             path: /healthz

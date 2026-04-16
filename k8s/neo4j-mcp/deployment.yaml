@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neo4j-mcp
+  namespace: tas-mcp-servers
+  labels:
+    app: neo4j-mcp
+    component: mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: neo4j-mcp
+      project: tas
+      service: neo4j-mcp
+      tier: mcp-servers
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: neo4j-mcp
+        component: mcp-server
+        project: tas
+        service: neo4j-mcp
+        tier: mcp-servers
+    spec:
+      containers:
+      - name: neo4j-mcp
+        image: registry-api.tas.scharber.com/tas-mcp-bridge:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        env:
+        - name: MCP_COMMAND
+          value: uvx
+        - name: MCP_ARGS
+          value: '["mcp-neo4j-cypher", "--transport", "stdio"]'
+        - name: BRIDGE_PORT
+          value: "8000"
+        - name: BRIDGE_NAME
+          value: neo4j-mcp
+        - name: BRIDGE_VERSION
+          value: "1.0.0"
+        envFrom:
+        - configMapRef:
+            name: neo4j-mcp-config
+        - secretRef:
+            name: neo4j-mcp-secret
+        resources: {}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5

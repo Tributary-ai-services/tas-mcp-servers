@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio-mcp
+  namespace: tas-mcp-servers
+  labels:
+    app: minio-mcp
+    component: mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio-mcp
+      project: tas
+      service: minio-mcp
+      tier: mcp-servers
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: minio-mcp
+        component: mcp-server
+        project: tas
+        service: minio-mcp
+        tier: mcp-servers
+    spec:
+      containers:
+      - name: minio-mcp-native
+        image: quay.io/minio/aistor/mcp-server-aistor:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8090
+          name: native-http
+          protocol: TCP
+        args:
+        - --http
+        - --http-port
+        - "8090"
+        - --allow-write
+        - --allow-admin
+        - --allowed-directories
+        - /tmp/downloads,/tmp/uploads
+        envFrom:
+        - configMapRef:
+            name: minio-mcp-config
+        - secretRef:
+            name: minio-mcp-secret
+        resources: {}
+        livenessProbe:
+          tcpSocket:
+            port: 8090
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 8090
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+      - name: minio-mcp-bridge
+        image: registry-api.tas.scharber.com/tas-mcp-bridge:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        env:
+        - name: BRIDGE_PORT
+          value: "8000"
+        - name: BRIDGE_NAME
+          value: minio-mcp
+        - name: BRIDGE_VERSION
+          value: "1.0.0"
+        - name: MCP_HTTP_UPSTREAM
+          value: http://localhost:8090/mcp
+        - name: MCP_SERVER_TYPE
+          value: minio
+        resources: {}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          timeoutSeconds: 5
