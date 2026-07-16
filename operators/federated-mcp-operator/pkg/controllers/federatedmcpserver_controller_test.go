@@ -200,4 +200,58 @@ func TestReconcile_FailsWhenAuthSecretMissing(t *testing.T) {
 	if fms.Status.Phase != "Failed" || fms.Status.Registered {
 		t.Errorf("status should be Failed/unregistered: %+v", fms.Status)
 	}
+
+	// The failure path must requeue, or the CR would stay Failed forever (the
+	// controller doesn't watch Secrets).
+	res, err := r.Reconcile(context.Background(), ctrlRequest(name))
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if res.RequeueAfter <= 0 {
+		t.Error("failure path must requeue so the CR can self-heal")
+	}
+}
+
+// A CR whose auth Secret is created AFTER it must recover on a later reconcile
+// (driven in production by the failure-path requeue), not stay Failed forever.
+func TestReconcile_RecoversWhenSecretAppears(t *testing.T) {
+	requireEnvtest(t)
+	f := newFakeGateway()
+	defer f.close()
+	r := newReconciler(f)
+
+	name := "secret-recovery"
+	mustCreate(t, &mcpv1.FederatedMCPServer{
+		ObjectMeta: objectMeta(name),
+		Spec: mcpv1.FederatedMCPServerSpec{
+			DisplayName: "S",
+			Endpoint:    "http://s:1",
+			Auth: mcpv1.AuthSpec{
+				Type:      "api_key",
+				SecretRef: &mcpv1.SecretReference{Name: name + "-auth"},
+			},
+		},
+	})
+	reconcileToRegistered(t, r, keyOf(name))
+	if f.has(name) {
+		t.Fatal("precondition: not registered while secret is missing")
+	}
+
+	// The Secret shows up later.
+	mustCreate(t, &corev1.Secret{
+		ObjectMeta: objectMeta(name + "-auth"),
+		Data:       map[string][]byte{"api_key": []byte("s3cr3t")},
+	})
+	reconcileToRegistered(t, r, keyOf(name))
+
+	got, ok := f.get(name)
+	if !ok {
+		t.Fatal("server should register once the secret appears")
+	}
+	if got.Auth.Config["api_key"] != "s3cr3t" {
+		t.Errorf("auth not resolved after recovery: %+v", got.Auth)
+	}
+	if fms := getFMS(t, keyOf(name)); fms.Status.Phase != "Registered" {
+		t.Errorf("status should recover to Registered, got %q", fms.Status.Phase)
+	}
 }

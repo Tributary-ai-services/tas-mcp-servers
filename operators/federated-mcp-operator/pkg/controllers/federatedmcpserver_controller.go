@@ -202,9 +202,11 @@ func (r *FederatedMCPServerReconciler) fail(ctx context.Context, fms *mcpv1.Fede
 	if err := r.Status().Update(ctx, fms); err != nil {
 		return ctrl.Result{}, err
 	}
-	// A build/secret error is not transient — surface it and wait for a spec
-	// change (a new reconcile) rather than hot-looping.
-	return ctrl.Result{}, nil
+	// The cause may be transient — most commonly an auth Secret that is created
+	// AFTER the CR, or a gateway blip. Nothing else re-triggers this CR (the
+	// controller doesn't watch Secrets), so requeue to retry rather than staying
+	// Failed until a manual edit.
+	return ctrl.Result{RequeueAfter: requeueAfterError}, nil
 }
 
 // SetupWithManager wires the reconciler to watch FederatedMCPServer CRs.
