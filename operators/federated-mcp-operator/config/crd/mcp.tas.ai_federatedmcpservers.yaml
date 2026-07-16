@@ -1,0 +1,241 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: federatedmcpservers.mcp.tas.ai
+spec:
+  group: mcp.tas.ai
+  names:
+    kind: FederatedMCPServer
+    listKind: FederatedMCPServerList
+    plural: federatedmcpservers
+    shortNames:
+    - fms
+    singular: federatedmcpserver
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.endpoint
+      name: Endpoint
+      type: string
+    - jsonPath: .spec.protocol
+      name: Protocol
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.registered
+      name: Registered
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          FederatedMCPServer is the Schema for the federatedmcpservers API. Each CR
+          declares one downstream MCP server for the tas-mcp gateway to federate; the
+          operator keeps the gateway's registry in sync with these CRs.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              FederatedMCPServerSpec declares a downstream MCP server that the operator
+              registers into the tas-mcp federation gateway. The fields mirror the
+              gateway's registerable server model (federation.MCPServer); the controller
+              maps this spec onto the gateway's POST /api/v1/federation/servers payload.
+            properties:
+              auth:
+                description: Auth describes how the gateway authenticates to the server.
+                properties:
+                  secretRef:
+                    description: |-
+                      SecretRef references a Secret whose keys become the auth config map
+                      forwarded to the gateway (e.g. {"api_key": "..."} or {"token": "..."}).
+                      Ignored when Type is "none".
+                    properties:
+                      name:
+                        description: Name of the Secret.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  type:
+                    default: none
+                    description: Type is the auth method.
+                    enum:
+                    - none
+                    - api_key
+                    - oauth2
+                    - jwt
+                    - basic
+                    - bearer
+                    type: string
+                type: object
+              capabilities:
+                description: Capabilities is the list of tools/methods the server
+                  exposes.
+                items:
+                  type: string
+                type: array
+              category:
+                description: Category groups the server (e.g. "search", "database",
+                  "development-tools").
+                type: string
+              description:
+                description: Description is a short description of what the server
+                  provides.
+                type: string
+              displayName:
+                description: DisplayName is the human-readable server name.
+                minLength: 1
+                type: string
+              endpoint:
+                description: Endpoint is the URL the gateway uses to reach the server.
+                minLength: 1
+                type: string
+              metadata:
+                additionalProperties:
+                  type: string
+                description: Metadata is arbitrary key/value metadata attached to
+                  the registration.
+                type: object
+              protocol:
+                default: http
+                description: Protocol is the transport the gateway speaks to the server.
+                enum:
+                - http
+                - grpc
+                - sse
+                - stdio
+                type: string
+              serverID:
+                description: |-
+                  ServerID is the stable federation id for this server. Defaults to the CR
+                  name when empty. Changing it re-registers under the new id.
+                type: string
+              tags:
+                description: Tags are free-form labels for discovery/filtering.
+                items:
+                  type: string
+                type: array
+              version:
+                default: 1.0.0
+                description: Version is the server's semantic version.
+                type: string
+            required:
+            - displayName
+            - endpoint
+            type: object
+          status:
+            description: FederatedMCPServerStatus is the observed registration state.
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              lastError:
+                description: LastError is the last reconcile error, if any.
+                type: string
+              lastRegisteredTime:
+                description: LastRegisteredTime is when the server was last (re)registered.
+                format: date-time
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the .metadata.generation last reconciled.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the high-level lifecycle phase.
+                enum:
+                - Pending
+                - Registered
+                - Failed
+                type: string
+              registered:
+                description: Registered is true when the server is currently present
+                  in the gateway.
+                type: boolean
+              registeredID:
+                description: |-
+                  RegisteredID is the federation id under which the server was registered
+                  (tracked so a ServerID change can unregister the old id).
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
