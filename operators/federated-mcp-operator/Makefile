@@ -1,5 +1,7 @@
 IMG ?= registry-api.tas.scharber.com/federated-mcp-operator:0.1.0
 CONTROLLER_GEN ?= $(shell go env GOPATH)/bin/controller-gen
+SETUP_ENVTEST ?= $(shell go env GOPATH)/bin/setup-envtest
+ENVTEST_K8S_VERSION ?= 1.29.x
 
 .PHONY: all
 all: generate manifests fmt vet build
@@ -21,9 +23,13 @@ fmt:
 vet:
 	go vet ./...
 
+.PHONY: envtest-tools
+envtest-tools: ## Install setup-envtest if missing
+	@test -x "$(SETUP_ENVTEST)" || go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+
 .PHONY: test
-test:
-	go test ./... -count=1
+test: envtest-tools ## Run unit + envtest controller tests (provisions the apiserver binaries)
+	KUBEBUILDER_ASSETS="$(shell $(SETUP_ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -count=1
 
 .PHONY: build
 build:

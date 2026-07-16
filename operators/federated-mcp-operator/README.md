@@ -80,11 +80,17 @@ make samples              # apply the example CRs
 
 This is a working skeleton. Implemented: register/re-register/unregister with a
 finalizer, auth-Secret resolution, and **drift healing** (periodic gateway-state
-verification + re-register after a gateway restart), with `httptest` coverage of
-the gateway REST contract.
+verification + re-register after a gateway restart).
+
+Test coverage:
+- **`pkg/gateway`** — `httptest` coverage of the REST contract (register,
+  already-exists, idempotent unregister, `Exists` drift signal).
+- **`pkg/controllers`** — **envtest** (real apiserver) reconcile tests: register
+  on create, unregister-on-delete via finalizer, drift re-register after a
+  gateway restart, re-register on spec change, auth-Secret resolution, and
+  failure when the referenced Secret is missing. Run with `make test` (it
+  provisions the apiserver binaries via `setup-envtest`).
 
 Before production:
-- Add controller-level tests (envtest) for the reconcile paths (finalizer,
-  re-register on spec change, drift re-register, secret resolution).
 - Decide leader-election + replica strategy and whether one operator manages
   multiple gateways.
