@@ -26,6 +26,7 @@ spec:
   endpoint: "http://napkin-mcp.tas-mcp-servers.svc.cluster.local:8087"
   protocol: http
   auth: { type: none }
+  reduce: true
   capabilities: [generate_visual]
 ---
 apiVersion: mcp.tas.ai/v1
@@ -52,6 +53,7 @@ spec:
   endpoint: "http://assembler-mcp.tas-mcp-servers.svc.cluster.local:8091"
   protocol: http
   auth: { type: none }
+  reduce: true
   capabilities: [assemble_document, list_templates, create_template, store_artifact]
 ---
 apiVersion: mcp.tas.ai/v1
@@ -104,6 +106,7 @@ spec:
   endpoint: "http://paper-search-mcp.tas-mcp-servers.svc.cluster.local:8000"
   protocol: http
   auth: { type: none }
+  reduce: true
   capabilities: []  # refine from /mcp/tools/list
 ---
 apiVersion: mcp.tas.ai/v1
@@ -117,6 +120,7 @@ spec:
   endpoint: "http://context7-mcp.tas-mcp-servers.svc.cluster.local:8000"
   protocol: http
   auth: { type: none }
+  reduce: true
   capabilities: []  # refine from /mcp/tools/list
 ---
 apiVersion: mcp.tas.ai/v1
@@ -143,6 +147,7 @@ spec:
   endpoint: "http://podcast-mcp.tas-mcp-servers.svc.cluster.local:8092"
   protocol: http
   auth: { type: none }
+  reduce: true
   capabilities: [parse_script, generate_speech]
 ---
 apiVersion: mcp.tas.ai/v1
