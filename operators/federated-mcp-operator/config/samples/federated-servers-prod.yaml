@@ -1,14 +1,13 @@
 # FederatedMCPServer CRs for the MCP servers federated into prod-tas-mcp.
 #
 # Status (validated end-to-end through the gateway on 2026-07-16, real tool
-# lists returned): 10 servers working. Tool counts in comments.
+# lists returned): 11 servers working. Tool counts in comments.
 #
 # EXCLUDED (registered, invoke-tested, removed — reasons):
 #   * kokoro-tts  — not an MCP server (OpenAI-style TTS API: /v1/models 200, /mcp/* 404).
 #   * neo4j-mcp   — bridge returns 500 "Invalid request parameters" on GET /mcp/tools/list
 #                   (needs a server-side fix before re-adding).
-#   * dbhub       — SSE-based MCP server (/sse, /message); needs SSE transport, which the
-#                   gateway HTTP proxy doesn't support yet. Re-add with protocol once supported.
+# dbhub uses the MCP Streamable-HTTP transport → protocol: sse (added in tas-mcp #24).
 #
 # Only add servers you want the GATEWAY to front (reduce-at-source + compliance
 # scanning on their tool results). REDUCTION_ENABLED is currently off on prod, so
@@ -145,3 +144,15 @@ spec:
   protocol: http
   auth: { type: none }
   capabilities: [parse_script, generate_speech]
+---
+apiVersion: mcp.tas.ai/v1
+kind: FederatedMCPServer
+metadata:
+  name: dbhub
+  namespace: tas-mcp-servers
+spec:
+  displayName: "DBHub Database MCP"  # 1 tool (execute_sql), Streamable-HTTP transport
+  category: database
+  endpoint: "http://dbhub.tas-mcp-servers.svc.cluster.local:8080"
+  protocol: sse
+  auth: { type: none }
