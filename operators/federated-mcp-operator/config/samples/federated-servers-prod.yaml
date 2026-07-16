@@ -1,0 +1,147 @@
+# FederatedMCPServer CRs for the MCP servers federated into prod-tas-mcp.
+#
+# Status (validated end-to-end through the gateway on 2026-07-16, real tool
+# lists returned): 10 servers working. Tool counts in comments.
+#
+# EXCLUDED (registered, invoke-tested, removed — reasons):
+#   * kokoro-tts  — not an MCP server (OpenAI-style TTS API: /v1/models 200, /mcp/* 404).
+#   * neo4j-mcp   — bridge returns 500 "Invalid request parameters" on GET /mcp/tools/list
+#                   (needs a server-side fix before re-adding).
+#   * dbhub       — SSE-based MCP server (/sse, /message); needs SSE transport, which the
+#                   gateway HTTP proxy doesn't support yet. Re-add with protocol once supported.
+#
+# Only add servers you want the GATEWAY to front (reduce-at-source + compliance
+# scanning on their tool results). REDUCTION_ENABLED is currently off on prod, so
+# this federates/routes them; reduce-at-source activates when it's enabled.
+#
+# Apply:  kubectl apply -f federated-servers-prod.yaml
+---
+apiVersion: mcp.tas.ai/v1
+kind: FederatedMCPServer
+metadata:
+  name: napkin-mcp
+  namespace: tas-mcp-servers
+spec:
+  displayName: "Napkin AI Visual Generation"  # 7 tools
+  category: visualization
+  endpoint: "http://napkin-mcp.tas-mcp-servers.svc.cluster.local:8087"
+  protocol: http
+  auth: { type: none }
+  capabilities: [generate_visual]
+---
+apiVersion: mcp.tas.ai/v1
+kind: FederatedMCPServer
+metadata:
+  name: postgres-mcp
+  namespace: tas-mcp-servers
+spec:
+  displayName: "PostgreSQL MCP"  # 1 tool
+  category: database
+  endpoint: "http://postgres-mcp.tas-mcp-servers.svc.cluster.local:8000"
+  protocol: http
+  auth: { type: none }
+  capabilities: [query]
+---
+apiVersion: mcp.tas.ai/v1
+kind: FederatedMCPServer
+metadata:
+  name: assembler-mcp
+  namespace: tas-mcp-servers
+spec:
+  displayName: "Document Assembler MCP"  # 5 tools
+  category: document-assembly
+  endpoint: "http://assembler-mcp.tas-mcp-servers.svc.cluster.local:8091"
+  protocol: http
+  auth: { type: none }
+  capabilities: [assemble_document, list_templates, create_template, store_artifact]
+---
+apiVersion: mcp.tas.ai/v1
+kind: FederatedMCPServer
+metadata:
+  name: kafka-mcp
+  namespace: tas-mcp-servers
+spec:
+  displayName: "Kafka MCP"  # 9 tools
+  category: messaging
+  endpoint: "http://kafka-mcp.tas-mcp-servers.svc.cluster.local:8000"
+  protocol: http
+  auth: { type: none }
+  capabilities: []  # refine from /mcp/tools/list
+---
+apiVersion: mcp.tas.ai/v1
+kind: FederatedMCPServer
+metadata:
+  name: minio-mcp
+  namespace: tas-mcp-servers
+spec:
+  displayName: "MinIO Object Storage MCP"  # 23 tools
+  category: storage
+  endpoint: "http://minio-mcp.tas-mcp-servers.svc.cluster.local:8000"
+  protocol: http
+  auth: { type: none }
+  capabilities: []  # refine from /mcp/tools/list
+---
+apiVersion: mcp.tas.ai/v1
+kind: FederatedMCPServer
+metadata:
+  name: grafana-mcp
+  namespace: tas-mcp-servers
+spec:
+  displayName: "Grafana MCP"  # 51 tools
+  category: observability
+  endpoint: "http://grafana-mcp.tas-mcp-servers.svc.cluster.local:8000"
+  protocol: http
+  auth: { type: none }
+  capabilities: []  # refine from /mcp/tools/list
+---
+apiVersion: mcp.tas.ai/v1
+kind: FederatedMCPServer
+metadata:
+  name: paper-search-mcp
+  namespace: tas-mcp-servers
+spec:
+  displayName: "Paper Search MCP"  # 19 tools
+  category: search
+  endpoint: "http://paper-search-mcp.tas-mcp-servers.svc.cluster.local:8000"
+  protocol: http
+  auth: { type: none }
+  capabilities: []  # refine from /mcp/tools/list
+---
+apiVersion: mcp.tas.ai/v1
+kind: FederatedMCPServer
+metadata:
+  name: context7-mcp
+  namespace: tas-mcp-servers
+spec:
+  displayName: "Context7 Docs MCP"  # 2 tools
+  category: documentation
+  endpoint: "http://context7-mcp.tas-mcp-servers.svc.cluster.local:8000"
+  protocol: http
+  auth: { type: none }
+  capabilities: []  # refine from /mcp/tools/list
+---
+apiVersion: mcp.tas.ai/v1
+kind: FederatedMCPServer
+metadata:
+  name: sequential-thinking-mcp
+  namespace: tas-mcp-servers
+spec:
+  displayName: "Sequential Thinking MCP"  # 1 tool
+  category: reasoning
+  endpoint: "http://sequential-thinking-mcp.tas-mcp-servers.svc.cluster.local:8000"
+  protocol: http
+  auth: { type: none }
+  capabilities: [sequentialthinking]
+---
+apiVersion: mcp.tas.ai/v1
+kind: FederatedMCPServer
+metadata:
+  name: podcast-mcp
+  namespace: tas-mcp-servers
+spec:
+  displayName: "Podcast MCP"  # 7 tools
+  category: media
+  endpoint: "http://podcast-mcp.tas-mcp-servers.svc.cluster.local:8092"
+  protocol: http
+  auth: { type: none }
+  capabilities: [parse_script, generate_speech]
