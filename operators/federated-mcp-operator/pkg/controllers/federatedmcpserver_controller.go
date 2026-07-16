@@ -174,6 +174,7 @@ func (r *FederatedMCPServerReconciler) buildServer(ctx context.Context, fms *mcp
 		Capabilities: fms.Spec.Capabilities,
 		Tags:         fms.Spec.Tags,
 		Metadata:     fms.Spec.Metadata,
+		Reduce:       fms.Spec.Reduce,
 	}, nil
 }
 

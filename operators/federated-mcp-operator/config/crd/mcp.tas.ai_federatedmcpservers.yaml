@@ -128,6 +128,14 @@ spec:
                 - sse
                 - stdio
                 type: string
+              reduce:
+                description: |-
+                  Reduce opts this server's tool-call results into cache-safe
+                  reduce-at-source at the gateway. Default false. Reduction drops
+                  less-relevant chunks — suitable for text/RAG-heavy results, but it can lose
+                  data on structured output (SQL rows, metadata), so enable it only for
+                  servers whose results are safe to reduce.
+                type: boolean
               serverID:
                 description: |-
                   ServerID is the stable federation id for this server. Defaults to the CR
