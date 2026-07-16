@@ -66,7 +66,7 @@ spec:
   endpoint: "http://kafka-mcp.tas-mcp-servers.svc.cluster.local:8000"
   protocol: http
   auth: { type: none }
-  capabilities: []  # refine from /mcp/tools/list
+  capabilities: [cluster_overview, consume_messages, describe_configs, describe_consumer_group, describe_topic, list_brokers, list_consumer_groups, list_topics, produce_message]
 ---
 apiVersion: mcp.tas.ai/v1
 kind: FederatedMCPServer
@@ -79,7 +79,7 @@ spec:
   endpoint: "http://minio-mcp.tas-mcp-servers.svc.cluster.local:8000"
   protocol: http
   auth: { type: none }
-  capabilities: []  # refine from /mcp/tools/list
+  capabilities: [ask_object, copy_object, create_bucket, download_object, get_admin_info, get_bucket_lifecycle, get_bucket_replication, get_bucket_tags, get_bucket_versioning, get_data_usage_info, get_object_metadata, get_object_presigned_url, get_object_tags, get_object_versions, list_allowed_directories, list_bucket_contents, list_buckets, list_local_files, set_bucket_tags, set_bucket_versioning, set_object_tags, text_to_object, upload_object]
 ---
 apiVersion: mcp.tas.ai/v1
 kind: FederatedMCPServer
@@ -92,7 +92,7 @@ spec:
   endpoint: "http://grafana-mcp.tas-mcp-servers.svc.cluster.local:8000"
   protocol: http
   auth: { type: none }
-  capabilities: []  # refine from /mcp/tools/list
+  capabilities: [search_dashboards, get_dashboard_by_uid, get_dashboard_summary, get_dashboard_property, get_dashboard_panel_queries, update_dashboard, list_datasources, get_datasource_by_uid, get_datasource_by_name, query_prometheus, list_prometheus_metric_names, list_prometheus_label_names, list_prometheus_label_values, list_prometheus_metric_metadata, list_loki_label_names, list_loki_label_values, query_loki_logs, query_loki_stats, find_error_pattern_logs, list_incidents, get_incident, create_incident, add_activity_to_incident, list_alert_rules, get_alert_rule_by_uid, list_contact_points, list_oncall_schedules, list_oncall_teams, list_oncall_users, get_current_oncall_users, get_oncall_shift, list_teams, list_users_by_org, list_sift_investigations, get_sift_investigation, get_sift_analysis, find_slow_requests, list_pyroscope_label_names, list_pyroscope_label_values, list_pyroscope_profile_types, fetch_pyroscope_profile, generate_deeplink, get_assertions]
 ---
 apiVersion: mcp.tas.ai/v1
 kind: FederatedMCPServer
@@ -106,7 +106,7 @@ spec:
   protocol: http
   auth: { type: none }
   reduce: true
-  capabilities: []  # refine from /mcp/tools/list
+  capabilities: [search_papers, search_arxiv, search_webofscience, search_pubmed, search_biorxiv, search_medrxiv, search_semantic_scholar, search_iacr, download_paper, search_google_scholar, get_paper_by_doi, search_scihub, check_scihub_mirrors, get_platform_status, search_sciencedirect, search_springer, search_wiley, search_scopus, search_crossref]
 ---
 apiVersion: mcp.tas.ai/v1
 kind: FederatedMCPServer
@@ -120,7 +120,7 @@ spec:
   protocol: http
   auth: { type: none }
   reduce: true
-  capabilities: []  # refine from /mcp/tools/list
+  capabilities: [resolve-library-id, query-docs]
 ---
 apiVersion: mcp.tas.ai/v1
 kind: FederatedMCPServer
@@ -155,11 +155,12 @@ metadata:
   name: dbhub
   namespace: tas-mcp-servers
 spec:
-  displayName: "DBHub Database MCP"  # 1 tool (execute_sql), Streamable-HTTP transport
+  displayName: "DBHub Database MCP"  # 2 tools, Streamable-HTTP transport
   category: database
   endpoint: "http://dbhub.tas-mcp-servers.svc.cluster.local:8080"
   protocol: sse
   auth: { type: none }
+  capabilities: [execute_sql, search_objects]
 ---
 apiVersion: mcp.tas.ai/v1
 kind: FederatedMCPServer
@@ -172,4 +173,5 @@ spec:
   endpoint: "http://neo4j-mcp.tas-mcp-servers.svc.cluster.local:8000"
   protocol: http
   auth: { type: none }
+  capabilities: [get_neo4j_schema, read_neo4j_cypher, write_neo4j_cypher]
   # reduce omitted (false): graph/structured output
