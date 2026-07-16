@@ -36,6 +36,8 @@ type Server struct {
 	Capabilities []string          `json:"capabilities,omitempty"`
 	Tags         []string          `json:"tags,omitempty"`
 	Metadata     map[string]string `json:"metadata,omitempty"`
+	// Reduce opts this server's tool-call results into gateway reduce-at-source.
+	Reduce bool `json:"reduce,omitempty"`
 }
 
 // Auth mirrors the gateway's federation.AuthConfig.

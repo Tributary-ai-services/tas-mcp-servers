@@ -212,6 +212,31 @@ func TestReconcile_FailsWhenAuthSecretMissing(t *testing.T) {
 	}
 }
 
+// spec.reduce flows through to the gateway registration payload.
+func TestReconcile_ForwardsReduceFlag(t *testing.T) {
+	requireEnvtest(t)
+	f := newFakeGateway()
+	defer f.close()
+	r := newReconciler(f)
+
+	name := "reduce-flag"
+	mustCreate(t, &mcpv1.FederatedMCPServer{
+		ObjectMeta: objectMeta(name),
+		Spec: mcpv1.FederatedMCPServerSpec{
+			DisplayName: "S", Endpoint: "http://s:1", Reduce: true,
+		},
+	})
+	reconcileToRegistered(t, r, keyOf(name))
+
+	got, ok := f.get(name)
+	if !ok {
+		t.Fatal("server not registered")
+	}
+	if !got.Reduce {
+		t.Error("Reduce=true should be forwarded to the gateway registration")
+	}
+}
+
 // A CR whose auth Secret is created AFTER it must recover on a later reconcile
 // (driven in production by the failure-path requeue), not stay Failed forever.
 func TestReconcile_RecoversWhenSecretAppears(t *testing.T) {

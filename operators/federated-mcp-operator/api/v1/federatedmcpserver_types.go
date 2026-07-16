@@ -54,6 +54,14 @@ type FederatedMCPServerSpec struct {
 	// Metadata is arbitrary key/value metadata attached to the registration.
 	// +optional
 	Metadata map[string]string `json:"metadata,omitempty"`
+
+	// Reduce opts this server's tool-call results into cache-safe
+	// reduce-at-source at the gateway. Default false. Reduction drops
+	// less-relevant chunks — suitable for text/RAG-heavy results, but it can lose
+	// data on structured output (SQL rows, metadata), so enable it only for
+	// servers whose results are safe to reduce.
+	// +optional
+	Reduce bool `json:"reduce,omitempty"`
 }
 
 // AuthSpec describes authentication to the downstream server. Credential VALUES
