@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: postgres-mcp
-          image: registry-api.tas.scharber.com/tas-mcp-bridge:1.0.0
+          image: registry-api.tas.scharber.com/tas-mcp-bridge:1.1.0
           imagePullPolicy: Always
           ports:
             - name: http
@@ -40,7 +40,7 @@ spec:
             - name: BRIDGE_NAME
               value: "postgres-mcp"
             - name: BRIDGE_VERSION
-              value: "1.0.0"
+              value: "1.1.0"
           envFrom:
             - configMapRef:
                 name: postgres-mcp-config

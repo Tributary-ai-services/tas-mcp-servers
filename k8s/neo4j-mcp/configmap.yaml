@@ -8,4 +8,6 @@ metadata:
     component: mcp-server
 data:
   NEO4J_DATABASE: neo4j
-  NEO4J_URI: bolt+ssc://neo4j.aether-be.svc.cluster.local:7687
+  # Plain bolt:// — Bolt TLS is terminated at the NGINX ingress and DISABLED on
+  # the in-cluster Neo4j pod, so bolt+ssc:// fails the handshake from here.
+  NEO4J_URI: bolt://neo4j.aether-be.svc.cluster.local:7687
