@@ -1,13 +1,12 @@
 # FederatedMCPServer CRs for the MCP servers federated into prod-tas-mcp.
 #
 # Status (validated end-to-end through the gateway on 2026-07-16, real tool
-# lists returned): 11 servers working. Tool counts in comments.
+# lists returned): 12 servers working. Tool counts in comments.
 #
 # EXCLUDED (registered, invoke-tested, removed — reasons):
 #   * kokoro-tts  — not an MCP server (OpenAI-style TTS API: /v1/models 200, /mcp/* 404).
-#   * neo4j-mcp   — bridge returns 500 "Invalid request parameters" on GET /mcp/tools/list
-#                   (needs a server-side fix before re-adding).
 # dbhub uses the MCP Streamable-HTTP transport → protocol: sse (added in tas-mcp #24).
+# neo4j-mcp works after the bridge initialize-handshake fix (tas-mcp-bridge:1.1.0).
 #
 # Only add servers you want the GATEWAY to front (reduce-at-source + compliance
 # scanning on their tool results). REDUCTION_ENABLED is currently off on prod, so
@@ -161,3 +160,16 @@ spec:
   endpoint: "http://dbhub.tas-mcp-servers.svc.cluster.local:8080"
   protocol: sse
   auth: { type: none }
+---
+apiVersion: mcp.tas.ai/v1
+kind: FederatedMCPServer
+metadata:
+  name: neo4j-mcp
+  namespace: tas-mcp-servers
+spec:
+  displayName: "Neo4j Cypher MCP"  # 3 tools (get_neo4j_schema, read/write_neo4j_cypher)
+  category: database
+  endpoint: "http://neo4j-mcp.tas-mcp-servers.svc.cluster.local:8000"
+  protocol: http
+  auth: { type: none }
+  # reduce omitted (false): graph/structured output

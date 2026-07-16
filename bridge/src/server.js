@@ -295,6 +295,7 @@ class MCPProcessManager {
       pending: new Map(), // id -> { resolve, reject }
       buffer: '',
       lastUsed: Date.now(),
+      initPromise: null, // memoized MCP initialize handshake
     };
   }
 
@@ -334,8 +335,44 @@ class MCPProcessManager {
 
   async sendRequest(conn, method, params) {
     const entry = this.getOrSpawn(conn);
-    const id = randomUUID();
+    // The MCP spec requires an initialize handshake before any other request.
+    // Strict servers (e.g. the Python mcp-neo4j-cypher) reject tools/list with
+    // "Received request before initialization was complete" otherwise.
+    await this._ensureInitialized(entry);
+    return this._rawRequest(entry, method, params);
+  }
 
+  // _ensureInitialized runs (once per child) the initialize request + the
+  // initialized notification, memoizing the in-flight handshake so concurrent
+  // callers await the same one.
+  _ensureInitialized(entry) {
+    if (!entry.initPromise) {
+      entry.initPromise = (async () => {
+        await this._rawRequest(entry, 'initialize', {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: {
+            name: process.env.BRIDGE_NAME || 'tas-mcp-bridge',
+            version: process.env.BRIDGE_VERSION || '1.0.0',
+          },
+        });
+        this._notify(entry, 'notifications/initialized', {});
+      })().catch((err) => {
+        // Reset so the next request retries the handshake rather than wedging.
+        entry.initPromise = null;
+        throw err;
+      });
+    }
+    return entry.initPromise;
+  }
+
+  // _notify writes a JSON-RPC notification (no id, no response expected).
+  _notify(entry, method, params) {
+    entry.process.stdin.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+  }
+
+  _rawRequest(entry, method, params) {
+    const id = randomUUID();
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         entry.pending.delete(id);
@@ -353,14 +390,7 @@ class MCPProcessManager {
         },
       });
 
-      const jsonrpc = JSON.stringify({
-        jsonrpc: '2.0',
-        id,
-        method,
-        params,
-      });
-
-      entry.process.stdin.write(jsonrpc + '\n');
+      entry.process.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
     });
   }
 }

@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
       - name: context7-mcp
-        image: registry-api.tas.scharber.com/tas-mcp-bridge:1.0.0
+        image: registry-api.tas.scharber.com/tas-mcp-bridge:1.1.0
         imagePullPolicy: Always
         ports:
         - containerPort: 8000
@@ -43,7 +43,7 @@ spec:
         - name: BRIDGE_NAME
           value: context7-mcp
         - name: BRIDGE_VERSION
-          value: "1.0.0"
+          value: "1.1.0"
         resources: {}
         livenessProbe:
           httpGet:
