@@ -130,9 +130,28 @@ func (r *DBHubInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
+	// Refuse to publish a config with no sources. dbhub rejects such a file at
+	// startup ("must contain a [[sources]] array"), and rolling pods onto it
+	// leaves a ReplicaSet that can never become Ready, wedging the Deployment.
+	if !strings.Contains(configData, "[[sources]]") {
+		emptyErr := fmt.Errorf("refusing to publish a dbhub config with no sources (%d databases matched)", len(databases))
+		logger.Error(emptyErr, "Empty config generated")
+		r.setInstanceStatus(instance, dbhubv1alpha1.DBHubInstancePhaseFailed, emptyErr.Error())
+		if err := r.Status().Update(ctx, instance); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, emptyErr
+	}
+
 	// Calculate config hash
 	configHash := r.calculateHash(configData)
 	instance.Status.ConfigHash = configHash
+
+	// Hash the credentials as well. They reach the pod through envFrom, which is
+	// read once at container start, so a DSN that is first populated or later
+	// rotated must also roll the pods - otherwise they keep rendering their
+	// config from a stale environment and never pick the new value up.
+	credentialsHash := r.calculateCredentialsHash(credentialsData)
 
 	// Reconcile ConfigMap
 	if err := r.reconcileConfigMap(ctx, instance, configData); err != nil {
@@ -147,7 +166,7 @@ func (r *DBHubInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	// Reconcile Deployment
-	if err := r.reconcileDeployment(ctx, instance, configHash); err != nil {
+	if err := r.reconcileDeployment(ctx, instance, configHash, credentialsHash); err != nil {
 		logger.Error(err, "Failed to reconcile Deployment")
 		return ctrl.Result{}, err
 	}
@@ -352,6 +371,29 @@ func (r *DBHubInstanceReconciler) calculateHash(data string) string {
 	return fmt.Sprintf("%x", h[:8])
 }
 
+// calculateCredentialsHash hashes the credentials map so that a change to any
+// DSN rolls the pods. Keys are sorted first: Go randomises map iteration order,
+// and hashing in that order would produce a different value on every reconcile
+// and roll the pods continuously.
+func (r *DBHubInstanceReconciler) calculateCredentialsHash(credentials map[string][]byte) string {
+	keys := make([]string, 0, len(credentials))
+	for k := range credentials {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var b strings.Builder
+	for _, k := range keys {
+		v := credentials[k]
+		// Length-prefixed rather than "key=value\n": with a plain separator,
+		// {"A": "b=c"} and {"A=b": "c"} would hash alike, and a DSN containing
+		// a newline could imitate a record boundary.
+		fmt.Fprintf(&b, "%d:%s%d:", len(k), k, len(v))
+		b.Write(v)
+	}
+	return r.calculateHash(b.String())
+}
+
 // reconcileConfigMap creates or updates the ConfigMap with TOML config template
 func (r *DBHubInstanceReconciler) reconcileConfigMap(ctx context.Context, instance *dbhubv1alpha1.DBHubInstance, configData string) error {
 	configMap := &corev1.ConfigMap{
@@ -417,7 +459,7 @@ func (r *DBHubInstanceReconciler) reconcileCredentialsSecret(ctx context.Context
 }
 
 // reconcileDeployment creates or updates the Deployment
-func (r *DBHubInstanceReconciler) reconcileDeployment(ctx context.Context, instance *dbhubv1alpha1.DBHubInstance, configHash string) error {
+func (r *DBHubInstanceReconciler) reconcileDeployment(ctx context.Context, instance *dbhubv1alpha1.DBHubInstance, configHash, credentialsHash string) error {
 	replicas := instance.GetReplicas()
 	port := instance.GetPort()
 	image := instance.GetImage()
@@ -425,6 +467,9 @@ func (r *DBHubInstanceReconciler) reconcileDeployment(ctx context.Context, insta
 
 	labels := r.labels(instance)
 	labels["config-hash"] = configHash
+	// Part of the pod template but deliberately not of selectorLabels, so a
+	// credential change rolls the pods without disturbing selector matching.
+	labels["creds-hash"] = credentialsHash
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
