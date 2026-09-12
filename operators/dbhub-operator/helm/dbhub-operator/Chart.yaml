@@ -1,0 +1,18 @@
+apiVersion: v2
+name: dbhub-operator
+description: A Kubernetes operator for managing DBHub SQL MCP servers
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - dbhub
+  - mcp
+  - database
+  - kubernetes
+  - operator
+home: https://github.com/Tributary-ai-services/tas-mcp-servers
+sources:
+  - https://github.com/Tributary-ai-services/tas-mcp-servers
+maintainers:
+  - name: TAS Platform Team
+    email: platform@tributary.ai

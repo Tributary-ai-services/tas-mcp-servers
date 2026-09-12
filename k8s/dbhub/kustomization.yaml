@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: dbhub
+
+namespace: tas-mcp-servers
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - configmap.yaml
+  - ingress.yaml
+
+# Secret 'dbhub-secrets' must be created externally with DSN environment variables.
+# These are referenced in configmap.yaml's dbhub.toml as ${VAR_NAME}
+#
+# Example - create secret with database DSNs:
+#
+# kubectl create secret generic dbhub-secrets \
+#   --namespace=tas-mcp-servers \
+#   --from-literal=TAS_POSTGRES_DSN="postgres://tasuser:taspassword@tas-postgres-shared.tas-shared.svc.cluster.local:5432/tas_shared?sslmode=disable" \
+#   --from-literal=TAS_MYSQL_DSN="mysql://user:pass@mysql-host:3306/db" \
+#   --from-literal=ANALYTICS_DSN="postgres://readonly:pass@analytics:5432/warehouse"
+#
+# Then update configmap.yaml to add corresponding [[sources]] entries.
+#
+# Users select database by source ID when calling MCP tools:
+#   execute_sql(source="tas_postgres", query="SELECT ...")
+
+commonLabels:
+  project: tas
+  tier: shared-infrastructure
+  service: dbhub

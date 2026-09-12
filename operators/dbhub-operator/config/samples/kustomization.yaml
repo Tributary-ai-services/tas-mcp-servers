@@ -1,0 +1,5 @@
+## Append samples of your project ##
+resources:
+- dbhub_v1alpha1_database.yaml
+- dbhub_v1alpha1_dbhubinstance.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

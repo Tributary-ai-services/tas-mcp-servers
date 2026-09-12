@@ -1,0 +1,120 @@
+{{- if .Values.webhooks.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dbhub-operator.webhookServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dbhub-operator.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 9443
+  selector:
+    {{- include "dbhub-operator.selectorLabels" . | nindent 4 }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "dbhub-operator.fullname" . }}-mutating
+  labels:
+    {{- include "dbhub-operator.labels" . | nindent 4 }}
+  {{- if .Values.webhooks.certManager.enabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "dbhub-operator.webhookCertName" . }}
+  {{- end }}
+webhooks:
+  - name: mdatabase-v1alpha1.kb.io
+    admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: {{ include "dbhub-operator.webhookServiceName" . }}
+        namespace: {{ .Release.Namespace }}
+        path: /mutate-dbhub-tas-io-v1alpha1-database
+    failurePolicy: Fail
+    rules:
+      - apiGroups:
+          - dbhub.tas.io
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - databases
+    sideEffects: None
+  - name: mdbhubinstance-v1alpha1.kb.io
+    admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: {{ include "dbhub-operator.webhookServiceName" . }}
+        namespace: {{ .Release.Namespace }}
+        path: /mutate-dbhub-tas-io-v1alpha1-dbhubinstance
+    failurePolicy: Fail
+    rules:
+      - apiGroups:
+          - dbhub.tas.io
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - dbhubinstances
+    sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "dbhub-operator.fullname" . }}-validating
+  labels:
+    {{- include "dbhub-operator.labels" . | nindent 4 }}
+  {{- if .Values.webhooks.certManager.enabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "dbhub-operator.webhookCertName" . }}
+  {{- end }}
+webhooks:
+  - name: vdatabase-v1alpha1.kb.io
+    admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: {{ include "dbhub-operator.webhookServiceName" . }}
+        namespace: {{ .Release.Namespace }}
+        path: /validate-dbhub-tas-io-v1alpha1-database
+    failurePolicy: Fail
+    rules:
+      - apiGroups:
+          - dbhub.tas.io
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - databases
+    sideEffects: None
+  - name: vdbhubinstance-v1alpha1.kb.io
+    admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: {{ include "dbhub-operator.webhookServiceName" . }}
+        namespace: {{ .Release.Namespace }}
+        path: /validate-dbhub-tas-io-v1alpha1-dbhubinstance
+    failurePolicy: Fail
+    rules:
+      - apiGroups:
+          - dbhub.tas.io
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - dbhubinstances
+    sideEffects: None
+{{- end }}

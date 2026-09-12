@@ -1,0 +1,73 @@
+apiVersion: dbhub.tas.io/v1alpha1
+kind: DBHubInstance
+metadata:
+  name: dbhub
+  namespace: tas-mcp-servers
+spec:
+  # Number of replicas
+  replicas: 1
+
+  # Container image
+  image: bytebase/dbhub:latest
+  imagePullPolicy: IfNotPresent
+
+  # MCP transport protocol
+  transport: http
+  port: 8080
+
+  # Select databases by labels
+  databaseSelector:
+    matchLabels:
+      environment: production
+
+  # Default access policy for all databases
+  defaultPolicy:
+    readonly: true
+    maxRows: 1000
+    allowedOperations:
+      - execute_sql
+      - search_objects
+
+  # Resource requirements
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+---
+# Example with specific database selection by name
+apiVersion: dbhub.tas.io/v1alpha1
+kind: DBHubInstance
+metadata:
+  name: dbhub-analytics
+  namespace: tas-analytics
+spec:
+  replicas: 2
+
+  image: bytebase/dbhub:latest
+  transport: http
+  port: 8080
+
+  # Select specific databases by name
+  databaseSelector:
+    matchNames:
+      - analytics-mysql
+      - reporting-postgres
+
+  defaultPolicy:
+    readonly: true
+    maxRows: 10000
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+  # Node affinity for analytics workloads
+  nodeSelector:
+    workload-type: analytics

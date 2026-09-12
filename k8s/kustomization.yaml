@@ -9,6 +9,7 @@ resources:
   - assembler-mcp
   - context7-mcp
   - crawl4ai
+  - dbhub
   - grafana-mcp
   - kafka-mcp
   - kokoro-tts
