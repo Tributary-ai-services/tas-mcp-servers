@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: napkin-operator-metrics
+  namespace: tas-mcp-servers
+  labels:
+    app: napkin-operator
+    component: operator
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8088
+    targetPort: 8088
+    protocol: TCP
+    name: metrics
+  selector:
+    app: napkin-operator

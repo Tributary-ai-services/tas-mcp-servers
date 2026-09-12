@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: federated-mcp-operator
+  namespace: tas-mcp-servers
+  labels:
+    app: federated-mcp-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: federated-mcp-operator
+  template:
+    metadata:
+      labels:
+        app: federated-mcp-operator
+    spec:
+      serviceAccountName: federated-mcp-operator
+      containers:
+        - name: operator
+          image: registry-api.tas.scharber.com/federated-mcp-operator:0.1.0
+          args:
+            - --leader-elect
+            - --gateway-url=http://prod-tas-mcp-http.tas-mcp-prod.svc.cluster.local:8082
+          env:
+            - name: TAS_MCP_GATEWAY_URL
+              value: "http://prod-tas-mcp-http.tas-mcp-prod.svc.cluster.local:8082"
+          ports:
+            - name: metrics
+              containerPort: 8088
+            - name: health
+              containerPort: 8089
+          # Resources omitted — BestEffort QoS until profiled (TAS K8s policy)
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10

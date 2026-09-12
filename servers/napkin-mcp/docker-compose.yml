@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  napkin-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tas-mcp/napkin-mcp-server:${NAPKIN_MCP_VERSION:-1.0.0}
+    container_name: tas-napkin-mcp-server
+    hostname: napkin-mcp-server
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: tas-napkin-mcp-server
+      NAPKIN_API_KEY: ${NAPKIN_API_KEY}
+      NAPKIN_API_BASE_URL: ${NAPKIN_API_BASE_URL:-https://api.napkin.ai}
+      NAPKIN_POLLING_INTERVAL: ${NAPKIN_POLLING_INTERVAL:-3000}
+      NAPKIN_MAX_WAIT_TIME: ${NAPKIN_MAX_WAIT_TIME:-300000}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://tas-minio-shared:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
+      MINIO_BUCKET: ${MINIO_BUCKET:-napkin-visuals}
+      HEALTH_PORT: "8087"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "8087:8087"
+    networks:
+      - tas-shared-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8087/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    labels:
+      com.tributary-ai.service: napkin-mcp-server
+      com.tributary-ai.component: mcp-server
+      com.tributary-ai.version: "${NAPKIN_MCP_VERSION:-1.0.0}"
+
+  # One-shot container to create the napkin-visuals bucket
+  minio-init:
+    image: minio/mc:latest
+    container_name: tas-napkin-minio-init
+    depends_on:
+      napkin-mcp:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set minio ${MINIO_ENDPOINT:-http://tas-minio-shared:9000} ${MINIO_ACCESS_KEY:-minioadmin} ${MINIO_SECRET_KEY:-minioadmin123};
+        mc mb --ignore-existing minio/${MINIO_BUCKET:-napkin-visuals};
+        echo 'Bucket napkin-visuals is ready';
+      "
+    networks:
+      - tas-shared-network
+    restart: "no"
+
+networks:
+  tas-shared-network:
+    external: true

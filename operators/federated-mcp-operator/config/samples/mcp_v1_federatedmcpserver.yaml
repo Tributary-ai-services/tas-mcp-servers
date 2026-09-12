@@ -1,0 +1,45 @@
+apiVersion: mcp.tas.ai/v1
+kind: FederatedMCPServer
+metadata:
+  name: git-mcp
+  namespace: tas-mcp-servers
+spec:
+  # serverID defaults to metadata.name when omitted
+  displayName: "Git MCP Server"
+  description: "Repository automation and management"
+  version: "1.0.0"
+  category: "development-tools"
+  endpoint: "http://git-mcp.tas-mcp-servers.svc.cluster.local:3000"
+  protocol: http
+  auth:
+    type: none
+  capabilities:
+    - git_status
+    - git_diff
+    - git_commit
+    - git_log
+  tags:
+    - git
+    - vcs
+  metadata:
+    owner: platform-team
+---
+apiVersion: mcp.tas.ai/v1
+kind: FederatedMCPServer
+metadata:
+  name: postgres-mcp
+  namespace: tas-mcp-servers
+spec:
+  displayName: "PostgreSQL MCP Server"
+  category: "database"
+  endpoint: "http://postgres-mcp.tas-mcp-servers.svc.cluster.local:8080"
+  protocol: http
+  auth:
+    type: api_key
+    # credential VALUES come from this Secret's keys (e.g. api_key: <value>),
+    # never inlined in the CR
+    secretRef:
+      name: postgres-mcp-auth
+  capabilities:
+    - query
+    - list_tables

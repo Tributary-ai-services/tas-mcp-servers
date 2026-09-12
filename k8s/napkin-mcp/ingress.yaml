@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: napkin-mcp-ingress
+  namespace: tas-mcp-servers
+  annotations:
+    cert-manager.io/cluster-issuer: "tas-ca-issuer"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Extended timeouts for long-running visual generation
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - napkin-mcp.tas.scharber.com
+    secretName: napkin-mcp-tls
+  rules:
+  - host: napkin-mcp.tas.scharber.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: napkin-mcp
+            port:
+              number: 8087
