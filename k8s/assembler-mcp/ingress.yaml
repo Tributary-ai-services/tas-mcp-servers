@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: assembler-mcp-ingress
+  namespace: tas-mcp-servers
+  annotations:
+    cert-manager.io/cluster-issuer: tas-ca-issuer
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - assembler-mcp.tas.scharber.com
+      secretName: assembler-mcp-tls
+  rules:
+    - host: assembler-mcp.tas.scharber.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: assembler-mcp
+                port:
+                  number: 8091
