@@ -8,4 +8,12 @@ metadata:
     component: mcp-server
     service: postgres-mcp
 data:
-  DATABASE_URL: "postgresql://tasuser:taspassword@postgres-shared.tas-shared.svc.cluster.local:5432/tas_shared?sslmode=disable"
+  # SEC-21: this DSN used to carry the live shared-PostgreSQL password in a
+  # ConfigMap, in a PUBLIC repo. The password was rotated 2026-09-17; the real
+  # DSN now lives in Secret `postgres-mcp-secret` (key DATABASE_URL), which the
+  # Deployment loads via envFrom AFTER this ConfigMap - a later envFrom entry
+  # wins for the same key, so the Secret overrides what is here.
+  #
+  # The placeholder below is deliberate: if that Secret key ever goes missing,
+  # the connection fails loudly instead of quietly using a stale credential.
+  DATABASE_URL: "postgresql://tasuser:SET_VIA_SECRET_SEE_SEC21@postgres-shared.tas-shared.svc.cluster.local:5432/tas_shared?sslmode=disable"
