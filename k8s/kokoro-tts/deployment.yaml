@@ -5,9 +5,18 @@ metadata:
   namespace: tas-mcp-servers
 spec:
   replicas: 1
+  # The selector must spell out exactly what the LIVE Deployment selects on,
+  # because a selector is immutable and these labels used to be injected by
+  # kustomize `commonLabels` (OPS-28). With `labels: includeSelectors: false`
+  # kustomize no longer touches selectors, so declaring only `app` here would
+  # render a selector that no longer matches the running pods and the apply
+  # would be rejected.
   selector:
     matchLabels:
       app: kokoro-tts
+      project: tas
+      service: kokoro-tts
+      tier: mcp-servers
   template:
     metadata:
       labels:
