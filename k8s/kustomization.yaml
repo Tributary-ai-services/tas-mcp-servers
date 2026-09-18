@@ -22,6 +22,16 @@ resources:
   - podcast-mcp
   - sequential-thinking-mcp
 
-commonLabels:
-  project: tas
-  tier: mcp-servers
+# `labels:` with includeSelectors:false, NOT commonLabels (OPS-28).
+# commonLabels injects these into the immutable `spec.selector`, so
+# `kubectl apply -k` was rejected outright and this manifest could not
+# restore the workloads it describes.
+labels:
+  - includeSelectors: false
+    # but DO put them on the pod template: the selector (pinned to the live
+    # value in each deployment.yaml) requires them, and a template's labels
+    # must be a superset of the selector or the API rejects the Deployment.
+    includeTemplates: true
+    pairs:
+      project: tas
+      tier: mcp-servers

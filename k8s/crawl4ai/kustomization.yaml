@@ -12,7 +12,20 @@ resources:
   - configmap.yaml
   - ingress.yaml
 
-commonLabels:
-  project: tas
-  tier: shared-infrastructure
-  service: crawl4ai
+# `labels:` with includeSelectors:false, NOT commonLabels (OPS-28).
+# commonLabels injects these into the immutable `spec.selector`; live
+# crawl4ai already selects on all four, so apply was rejected.
+labels:
+  - includeSelectors: false
+    # but DO put them on the pod template: the selector (pinned to the live
+    # value in each deployment.yaml) requires them, and a template's labels
+    # must be a superset of the selector or the API rejects the Deployment.
+    includeTemplates: true
+    pairs:
+      project: tas
+      # mcp-servers, not shared-infrastructure: the live Deployment selects on
+      # tier=mcp-servers (as does the parent kustomization), and with the
+      # selector now pinned, a wrong value here lands in the pod template and
+      # the API rejects it as not matching the selector.
+      tier: mcp-servers
+      service: crawl4ai
