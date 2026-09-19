@@ -34,20 +34,39 @@ spec:
         - configMapRef:
             name: kokoro-tts-config
         # Resources removed — BestEffort QoS until profiled via Prometheus/Grafana
+        # Probes match the running Deployment exactly (OPS-27). They had drifted
+        # to httpGet for BOTH probes, which made this manifest unappliable:
+        # strategic merge ADDS the httpGet handler to the live tcpSocket rather
+        # than replacing it, and a probe with two handlers is rejected by the
+        # API ("may not specify more than 1 handler type").
+        #
+        # The split is deliberate and worth keeping. Liveness is tcpSocket: it
+        # only asks whether the process is listening. An httpGet liveness would
+        # hit /v1/audio/voices, which can be slow or blocked while the model
+        # loads or while a synthesis request is in flight — and a failed
+        # liveness probe kills the container, so a busy TTS engine would restart
+        # itself. Readiness is the httpGet, because that is the question worth
+        # asking before sending traffic: does the API actually answer? Its
+        # timeouts are generous (30s, 10 failures) for the same model-load
+        # reason.
         livenessProbe:
-          httpGet:
-            path: /v1/audio/voices
+          tcpSocket:
             port: 8880
           initialDelaySeconds: 120
           periodSeconds: 30
-          timeoutSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+          successThreshold: 1
         readinessProbe:
           httpGet:
             path: /v1/audio/voices
             port: 8880
+            scheme: HTTP
           initialDelaySeconds: 60
-          periodSeconds: 10
-          timeoutSeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 30
+          failureThreshold: 10
+          successThreshold: 1
         volumeMounts:
         - name: model-cache
           mountPath: /root/.cache
