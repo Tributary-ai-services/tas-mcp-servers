@@ -20,6 +20,21 @@ spec:
         component: mcp-server
         service: postgres-mcp
     spec:
+      # Prefer the compute node (pinova01, labelled tas.io/tier=compute).
+      # These are stateless MCP servers with no PVCs; running them off the
+      # node that hosts every database frees its memory and page cache.
+      #
+      # preferred, not required: if the compute node is unavailable they fall
+      # back to um773dev rather than sitting Pending.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: tas.io/tier
+                    operator: In
+                    values: ["compute"]
       containers:
         - name: postgres-mcp
           image: registry-api.tas.scharber.com/tas-mcp-bridge:1.1.0
