@@ -16,6 +16,21 @@ spec:
         app: federated-mcp-operator
     spec:
       serviceAccountName: federated-mcp-operator
+      # Prefer the compute node (pinova01, labelled tas.io/tier=compute).
+      # Stateless, no PVC; running it off the node that hosts every database
+      # frees that node's memory and page cache.
+      #
+      # preferred, not required: falls back to um773dev if the compute node
+      # is unavailable rather than sitting Pending.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: tas.io/tier
+                    operator: In
+                    values: ["compute"]
       containers:
         - name: operator
           image: registry-api.tas.scharber.com/federated-mcp-operator:0.1.0

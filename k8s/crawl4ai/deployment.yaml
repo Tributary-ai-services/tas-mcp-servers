@@ -26,6 +26,21 @@ spec:
         app: crawl4ai
         component: web-scraper
     spec:
+      # Prefer the compute node (pinova01, labelled tas.io/tier=compute).
+      # These are stateless MCP servers with no PVCs; running them off the
+      # node that hosts every database frees its memory and page cache.
+      #
+      # preferred, not required: if the compute node is unavailable they fall
+      # back to um773dev rather than sitting Pending.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: tas.io/tier
+                    operator: In
+                    values: ["compute"]
       containers:
       - name: crawl4ai
         image: unclecode/crawl4ai:latest
