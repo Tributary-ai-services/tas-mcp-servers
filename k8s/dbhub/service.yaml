@@ -13,5 +13,12 @@ spec:
     targetPort: 8080
     protocol: TCP
     name: http
+  # The operator labels its pods with app.kubernetes.io/{name,instance}; it does
+  # NOT set `app: dbhub`. This selector previously read `app: dbhub`, which
+  # matches nothing that runs — and unlike a Deployment selector, a Service
+  # selector is MUTABLE, so `kubectl apply` would have been accepted and
+  # silently repointed this Service at zero pods. dbhub would have gone
+  # unreachable with no error anywhere. Corrected to the live value.
   selector:
-    app: dbhub
+    app.kubernetes.io/name: dbhub
+    app.kubernetes.io/instance: dbhub
