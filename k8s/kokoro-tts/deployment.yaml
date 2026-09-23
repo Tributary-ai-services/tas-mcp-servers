@@ -48,7 +48,35 @@ spec:
         envFrom:
         - configMapRef:
             name: kokoro-tts-config
-        # Resources removed — BestEffort QoS until profiled via Prometheus/Grafana
+        # Profiled 2026-09-22 (Phase 1 of MEMORY-RIGHTSIZING-PLAN.md).
+        #
+        # WHY THIS STOPPED BEING BestEffort: this container is the largest
+        # single memory consumer in the cluster — measured at 1,014Mi working
+        # set — and it was declaring nothing at all. Two consequences, and the
+        # second is the one that bites. BestEffort is evicted FIRST under node
+        # pressure, so the biggest process on the node was also the most
+        # disposable. And because it reserved nothing, the scheduler believed
+        # pinova01 had a gigabyte more free than it did, and would happily
+        # place work there that cannot actually fit.
+        #
+        # Sizing follows CLAUDE.md's formula: requests ~= observed p95,
+        # limits ~= 2x. Most of this is loaded model weights, so the working
+        # set is flat rather than request-driven — 1Gi is a ceiling it sits
+        # at, not an average it wanders around.
+        #
+        # CAVEAT, deliberately recorded: this is a 6-hour window, not the 7d
+        # the policy asks for — cAdvisor only began being scraped on
+        # 2026-09-22 (Phase 0). It is sound for "not zero", which is what this
+        # change fixes; it is not a finely tuned ceiling. RE-PROFILE AFTER
+        # 2026-09-29, when a real 7d p95 exists:
+        #   quantile_over_time(0.95, container_memory_working_set_bytes{
+        #     namespace="tas-mcp-servers",pod=~"kokoro-tts.*",
+        #     container="kokoro-tts"}[7d])
+        resources:
+          requests:
+            memory: "1Gi"
+          limits:
+            memory: "2Gi"
         # Probes match the running Deployment exactly (OPS-27). They had drifted
         # to httpGet for BOTH probes, which made this manifest unappliable:
         # strategic merge ADDS the httpGet handler to the live tcpSocket rather
