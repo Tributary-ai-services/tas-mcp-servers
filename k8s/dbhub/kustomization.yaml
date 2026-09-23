@@ -6,10 +6,26 @@ metadata:
 
 namespace: tas-mcp-servers
 
+# No deployment.yaml and no configmap.yaml: the dbhub-operator generates both
+# from the DBHubInstance below and owns them via ownerReferences. The copies
+# that used to sit here could never have worked, and were dangerous in three
+# different ways:
+#
+#   Deployment  — rendered selector {app, project, service, tier} against a
+#                 live {app.kubernetes.io/name, .../instance}. A Deployment
+#                 selector is immutable, so `apply` was rejected outright:
+#                 "spec.selector: Invalid value ...: field is immutable".
+#   Service     — same label mismatch, but a Service selector IS mutable, so
+#                 the apply would have SUCCEEDED and repointed the Service at
+#                 nothing. Fixed in service.yaml.
+#   ConfigMap   — declared source id `tas_postgres` where the operator renders
+#                 `tas-postgres`, so applying it would have broken every
+#                 execute_sql(source=...) call and then been reverted on the
+#                 next reconcile. dbhub crash-looped for 227 days on a bad
+#                 [[sources]] array once already (MCP-7).
 resources:
-  - deployment.yaml
+  - dbhubinstance.yaml
   - service.yaml
-  - configmap.yaml
   - ingress.yaml
 
 # Secret 'dbhub-secrets' must be created externally with DSN environment variables.
@@ -28,7 +44,15 @@ resources:
 # Users select database by source ID when calling MCP tools:
 #   execute_sql(source="tas_postgres", query="SELECT ...")
 
-commonLabels:
-  project: tas
-  tier: shared-infrastructure
-  service: dbhub
+# `labels:` with includeSelectors:false, NOT commonLabels (OPS-28) — this is
+# what made the Service hazard above possible: commonLabels injects these into
+# spec.selector, so the Service's selector was being computed rather than
+# declared. Values are kept exactly as they are on the live objects rather
+# than aligned to the parent's `tier: mcp-servers`; that mismatch is real but
+# changing it here would be an unrelated relabel. See OPS-30.
+labels:
+  - includeSelectors: false
+    pairs:
+      project: tas
+      tier: shared-infrastructure
+      service: dbhub

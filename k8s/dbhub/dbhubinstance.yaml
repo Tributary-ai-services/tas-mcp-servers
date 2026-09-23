@@ -1,0 +1,59 @@
+---
+# The DBHubInstance CR is the source of truth for dbhub's Deployment and its
+# dbhub.toml ConfigMap — the operator (dbhub-operator, MCP-1/MCP-8) generates
+# both from this object and owns them via ownerReferences.
+#
+# WHY THIS FILE EXISTS: until now the live CR was committed nowhere. The only
+# copy in the repo was `operators/dbhub-operator/config/samples/` — and the
+# running instance was that kubebuilder *sample*, applied verbatim and left in
+# production for 237 days. Every field below matched it, including the
+# resources, so dbhub's memory request was never a sizing decision at all: it
+# was an example value nobody chose. That is MCP-11 repeating ("a kubebuilder
+# sample had been running as production infrastructure"), this time for the
+# instance that actually serves traffic.
+#
+# Do not add a Deployment or a ConfigMap for dbhub to this directory. The
+# operator creates them, and a committed copy cannot win: see the note in
+# kustomization.yaml for what the previous ones would have done.
+apiVersion: dbhub.tas.io/v1alpha1
+kind: DBHubInstance
+metadata:
+  name: dbhub
+  namespace: tas-mcp-servers
+spec:
+  replicas: 1
+  # Floating tag, contrary to OPS-14. Left as-is deliberately: pinning it is a
+  # separate change that would swap the running image, and this PR is about
+  # making the manifests describe what runs.
+  image: bytebase/dbhub:latest
+  imagePullPolicy: IfNotPresent
+  transport: http
+  port: 8080
+  databaseSelector:
+    matchLabels:
+      environment: production
+  defaultPolicy:
+    readonly: true
+    maxRows: 1000
+    allowedOperations:
+      - execute_sql
+      - search_objects
+  # Profiled 2026-09-22 (Phase 1 of MEMORY-RIGHTSIZING-PLAN.md). The request
+  # was 128Mi against a measured 144Mi working set — it used MORE than it
+  # reserved, so under node pressure it was a candidate for eviction while the
+  # scheduler believed it needed less than it does. 192Mi sits above observed
+  # with margin; the 512Mi limit is unchanged and still leaves ~3.5x headroom.
+  #
+  # CAVEAT: a 12-hour window, not the 7d the policy asks for — cAdvisor
+  # scraping only began 2026-09-22 (Phase 0, aether-shared#89). Sound for
+  # "the request is below reality", which is what this fixes. Re-profile after
+  # 2026-09-29:
+  #   quantile_over_time(0.95, container_memory_working_set_bytes{
+  #     namespace="tas-mcp-servers",pod=~"dbhub.*",container="dbhub"}[7d])
+  resources:
+    requests:
+      memory: "192Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
