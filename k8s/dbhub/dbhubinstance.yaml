@@ -25,7 +25,8 @@ spec:
   # Floating tag, contrary to OPS-14. Left as-is deliberately: pinning it is a
   # separate change that would swap the running image, and this PR is about
   # making the manifests describe what runs.
-  image: bytebase/dbhub:latest
+  # Pinned 2026-10-26 to the digest that was already running (no content change).
+  image: bytebase/dbhub@sha256:5f96ad680ed8c20c8b90bc82a8a3e8495d808b8417fd824715cf559152bbd083  # dbhub 0.15.0 per package.json; Hub retagged 0.15.0 since
   imagePullPolicy: IfNotPresent
   transport: http
   port: 8080

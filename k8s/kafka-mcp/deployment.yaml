@@ -42,8 +42,9 @@ spec:
                     values: ["compute"]
       containers:
       - name: kafka-mcp-native
-        image: registry-api.tas.scharber.com/kafka-mcp-native:latest
-        imagePullPolicy: Always
+        # Pinned 2026-10-26 to the digest that was already running (no content change).
+        image: registry-api.tas.scharber.com/kafka-mcp-native@sha256:865b2d18970aa8b3ed50c88eacb92da777bc2624f23521208d6188b2576eff32  # only ever tagged :latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
           name: native-http
