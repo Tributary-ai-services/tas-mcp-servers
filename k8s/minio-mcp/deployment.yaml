@@ -42,8 +42,12 @@ spec:
                     values: ["compute"]
       containers:
       - name: minio-mcp-native
-        image: quay.io/minio/aistor/mcp-server-aistor:latest
-        imagePullPolicy: Always
+        # quay.io/minio/aistor now 401s anonymous pulls, so `:latest` with
+        # pullPolicy Always failed on any restart. This is the exact build that
+        # was running (upstream digest sha256:8bb7292b...), exported from the
+        # pinova01 containerd cache and mirrored into our registry.
+        image: registry-api.tas.scharber.com/minio/aistor-mcp-server:sha-8bb7292b@sha256:c102b82d0e1b081e781d219268124347a240a8287e976552dc1927e184edae90
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8090
           name: native-http
