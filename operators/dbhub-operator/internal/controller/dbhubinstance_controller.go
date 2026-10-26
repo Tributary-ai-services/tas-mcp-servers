@@ -493,8 +493,10 @@ func (r *DBHubInstanceReconciler) reconcileDeployment(ctx context.Context, insta
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						{
-							Name:  "config-renderer",
-							Image: "bhgedigital/envsubst:latest",
+							Name: "config-renderer",
+							// Pinned by digest (2026-10-26): the image is unmaintained since 2018 and
+							// only ever tagged :latest, so the digest is the only stable name.
+							Image: "bhgedigital/envsubst@sha256:36a92e9344ef965e9318c8d2f70dd35cad654a4615b889c6a4dd483ca1ddec7c",
 							Command: []string{
 								"sh", "-c",
 								"envsubst < /config-template/dbhub.toml > /config/dbhub.toml",
