@@ -41,9 +41,16 @@ spec:
                   - key: tas.io/tier
                     operator: In
                     values: ["compute"]
+      # The Service is named crawl4ai, so service links would inject
+      # CRAWL4AI_PORT=tcp://<ip>:11235 -- and the image's entrypoint reads
+      # CRAWL4AI_PORT as its own listen port, so gunicorn died with
+      # "'tcp' is not a valid port number" (9,000+ restarts, 2026-09/10).
+      enableServiceLinks: false
       containers:
       - name: crawl4ai
-        image: unclecode/crawl4ai:latest
+        # Pinned (was :latest). 0.9.x's entrypoint changed behaviour under a
+        # floating tag; see the CRAWL4AI_API_TOKEN note below.
+        image: unclecode/crawl4ai:0.9.5
         ports:
         - containerPort: 11235
           name: http
@@ -51,6 +58,17 @@ spec:
         envFrom:
         - configMapRef:
             name: crawl4ai-config
+        env:
+        # Without a token the 0.9.x entrypoint binds 127.0.0.1 only, so the
+        # Service, the Ingress and the probes can never reach it. The Secret
+        # is created out of band (never committed):
+        #   kubectl create secret generic crawl4ai-api-token -n tas-mcp-servers \
+        #     --from-literal=token="$(openssl rand -hex 32)"
+        - name: CRAWL4AI_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: crawl4ai-api-token
+              key: token
         # Resources removed — BestEffort QoS until profiled via Prometheus/Grafana
         volumeMounts:
         - name: shm
