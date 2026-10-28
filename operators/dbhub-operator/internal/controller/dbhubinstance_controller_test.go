@@ -86,7 +86,7 @@ var _ = Describe("DBHubInstance Controller", func() {
 			}
 		})
 
-		It("should successfully reconcile the resource", func() {
+		It("should refuse to publish a config when no databases match", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &DBHubInstanceReconciler{
 				Client: k8sClient,
@@ -96,14 +96,14 @@ var _ = Describe("DBHubInstance Controller", func() {
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
-			Expect(err).NotTo(HaveOccurred())
+			// dbhub rejects a config with no [[sources]] at startup, so the
+			// controller must fail the reconcile rather than roll pods onto it.
+			Expect(err).To(MatchError(ContainSubstring("no sources")))
 
-			// Verify the resource status was updated
 			By("Checking the resource status")
 			updatedInstance := &dbhubv1alpha1.DBHubInstance{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, updatedInstance)).To(Succeed())
-			// With no matching databases, the instance should still create resources
-			Expect(updatedInstance.Status.Endpoint).To(ContainSubstring("test-dbhub-instance"))
+			Expect(updatedInstance.Status.Phase).To(Equal(dbhubv1alpha1.DBHubInstancePhaseFailed))
 		})
 	})
 })

@@ -5,4 +5,5 @@ kind: Kustomization
 images:
 - name: controller
   newName: registry-api.tas.scharber.com/dbhub-operator
-  newTag: v0.1.0
+  newTag: v0.1.4
+  digest: sha256:81da13303fa61adb1f9c77ac23d33d993622a3ed34121dfe525695c7b733a085
