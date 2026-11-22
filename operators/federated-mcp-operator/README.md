@@ -58,6 +58,23 @@ controller-runtime and mirrors the other TAS operators
   so the condition reflects that replica's last probe. It refreshes on
   `--resync-interval`, and status is written only when it changes.
 
+- **Ownership** (Plan #22 C.2) → every row the operator registers carries
+  `managed_by=operator`. The operator never updates or deletes a row whose
+  `managed_by` is anything else (a server configured in AIQG, `aiqg`): before
+  it unregisters (CR delete, id change, re-register on a spec change) it reads
+  the row and leaves a foreign one in place. A CR whose id collides with an
+  AIQG row gets phase `Failed` and `Registered=False` with reason
+  `ManagedByAIQG`, and is re-checked every `--resync-interval`; rename
+  `spec.serverID` or remove the row in AIQG to resolve it. A row with no
+  `managed_by` (written before tas-mcp C.1) is the operator's. A deleted
+  CR-managed row is still re-registered by drift healing, as before.
+- **Admin token** → when `MCP_ADMIN_TOKEN` is set, every gateway call carries
+  it in `TAS-MCP-Admin-Token`. tas-mcp with `MCP_TENANT_SERVERS=true` refuses
+  register/delete without it (401/403), and a GET without it sees only
+  platform rows, so the token must be in place **before** that flag is turned
+  on. The Deployment reads it from Secret `tas-mcp-admin-token`, key `token`,
+  marked optional so the operator starts without it.
+
 ## CRD
 
 `FederatedMCPServer` (`mcp.tas.ai/v1`, short name `fms`). Key spec fields:
@@ -84,6 +101,7 @@ See `config/samples/` for examples.
 | `--metrics-bind-address` | — | `:8088` |
 | `--health-probe-bind-address` | — | `:8089` |
 | `--leader-elect` | — | `false` |
+| — | `MCP_ADMIN_TOKEN` | empty (no header sent); from Secret `tas-mcp-admin-token`/`token`, optional |
 
 ## Develop
 

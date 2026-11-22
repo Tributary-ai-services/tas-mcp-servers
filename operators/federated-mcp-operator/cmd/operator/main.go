@@ -65,6 +65,8 @@ func main() {
 		"probe-addr", probeAddr,
 		"leader-election", enableLeaderElection,
 		"gateway-url", gatewayURL,
+		// Whether, never what: the token is a secret.
+		"gateway-admin-token", os.Getenv("MCP_ADMIN_TOKEN") != "",
 	)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -83,7 +85,7 @@ func main() {
 	if err = (&controllers.FederatedMCPServerReconciler{
 		Client:         mgr.GetClient(),
 		Scheme:         mgr.GetScheme(),
-		Gateway:        gateway.NewClient(gatewayURL, gatewayTimeout),
+		Gateway:        gateway.NewClient(gatewayURL, gatewayTimeout).WithAdminToken(os.Getenv("MCP_ADMIN_TOKEN")),
 		ResyncInterval: resyncInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "FederatedMCPServer")

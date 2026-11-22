@@ -40,6 +40,16 @@ spec:
           env:
             - name: TAS_MCP_GATEWAY_URL
               value: "http://prod-tas-mcp-http.tas-mcp-prod.svc.cluster.local:8082"
+            # tas-mcp's MCP_ADMIN_TOKEN (Plan #22 C.1/C.2), sent as
+            # TAS-MCP-Admin-Token. Required once the gateway runs with
+            # MCP_TENANT_SERVERS=true; optional so this Deployment still
+            # starts while the Secret does not exist (today's deploy).
+            - name: MCP_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: tas-mcp-admin-token
+                  key: token
+                  optional: true
           ports:
             - name: metrics
               containerPort: 8088

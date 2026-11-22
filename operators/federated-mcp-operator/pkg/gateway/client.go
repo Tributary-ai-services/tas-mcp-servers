@@ -21,6 +21,16 @@ import (
 // when the desired spec has changed.
 var ErrAlreadyRegistered = errors.New("server already registered")
 
+// AdminTokenHeader carries tas-mcp's MCP_ADMIN_TOKEN. With MCP_TENANT_SERVERS
+// on, the gateway refuses register and delete without it (401/403), and a GET
+// without it sees only platform servers (Plan #22 C.1).
+const AdminTokenHeader = "TAS-MCP-Admin-Token" //nolint:gosec // a header name
+
+// ManagedByOperator marks a registry row as this operator's (Plan #22 C.2).
+// The operator writes it on every row it registers and touches no row that
+// carries any other value: those are managed in AIQG.
+const ManagedByOperator = "operator"
+
 // Server is the registration payload — the subset of the gateway's
 // federation.MCPServer that a caller supplies. JSON tags match the gateway's
 // decode shape exactly.
@@ -38,6 +48,9 @@ type Server struct {
 	Metadata     map[string]string `json:"metadata,omitempty"`
 	// Reduce opts this server's tool-call results into gateway reduce-at-source.
 	Reduce bool `json:"reduce,omitempty"`
+	// ManagedBy is who owns the row; the operator always sends
+	// ManagedByOperator.
+	ManagedBy string `json:"managed_by,omitempty"`
 }
 
 // Auth mirrors the gateway's federation.AuthConfig.
@@ -50,6 +63,23 @@ type Auth struct {
 type Client struct {
 	baseURL string
 	http    *http.Client
+	// adminToken is sent in AdminTokenHeader on every request when set.
+	adminToken string
+}
+
+// WithAdminToken makes the client send token (MCP_ADMIN_TOKEN) on every
+// request. Empty sends nothing, which is what a gateway without
+// MCP_TENANT_SERVERS expects.
+func (c *Client) WithAdminToken(token string) *Client {
+	c.adminToken = token
+	return c
+}
+
+func (c *Client) do(req *http.Request) (*http.Response, error) {
+	if c.adminToken != "" {
+		req.Header.Set(AdminTokenHeader, c.adminToken)
+	}
+	return c.http.Do(req)
 }
 
 // NewClient returns a gateway client for baseURL (e.g.
@@ -79,7 +109,7 @@ func (c *Client) Register(ctx context.Context, s Server) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.http.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return fmt.Errorf("register request: %w", err)
 	}
@@ -118,9 +148,20 @@ type Probe struct {
 
 // State is what GET /api/v1/federation/servers/{id} reports about a server.
 type State struct {
+	// ManagedBy is the row's owner. Empty from a gateway older than C.1 or
+	// with MCP_TENANT_SERVERS off, which means the operator.
+	ManagedBy string `json:"managed_by,omitempty"`
+
 	// Probe is nil when the gateway does not probe (SERVER_PROBES_ENABLED
 	// off, or a gateway older than T.4) or has not probed the server yet.
 	Probe *Probe `json:"probe,omitempty"`
+}
+
+// ManagedByOther reports whether the row belongs to someone other than the
+// operator (AIQG). An absent value is the operator's: rows written before
+// C.1 carry none.
+func (s *State) ManagedByOther() bool {
+	return s != nil && s.ManagedBy != "" && s.ManagedBy != ManagedByOperator
 }
 
 // Exists reports whether the gateway currently has a server with this id. It is
@@ -142,7 +183,7 @@ func (c *Client) Get(ctx context.Context, id string) (*State, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	resp, err := c.http.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, false, fmt.Errorf("get request: %w", err)
 	}
@@ -176,7 +217,7 @@ func (c *Client) Unregister(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	resp, err := c.http.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return fmt.Errorf("unregister request: %w", err)
 	}
