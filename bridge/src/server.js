@@ -15,70 +15,26 @@
  *   MCP_SERVER_TYPE    - Server type for connection mapping: neo4j|postgres|minio|kafka|grafana
  *   BRIDGE_PORT        - HTTP port (default: 8000)
  *   MCP_ENV_*          - Extra env vars forwarded to child process (strip MCP_ENV_ prefix)
+ *   BRIDGE_MAX_CHILDREN - Most connection-specific child processes kept (default 32, LRU-evicted)
+ *
+ * Child processes are keyed by a hash of the whole _connection (password
+ * included) plus the TAS-Tenant-Id the tas-mcp proxy sends; see src/pool.js.
  *
  * Default connection env vars (used when no _connection is provided):
  *   (Set directly in the environment, e.g. NEO4J_URI, DATABASE_URL, etc.)
  */
 
 import http from 'node:http';
-import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
+
+import { MCPProcessManager, tenantOf } from './pool.js';
 
 const BRIDGE_PORT = parseInt(process.env.BRIDGE_PORT || '8000', 10);
 const MCP_COMMAND = process.env.MCP_COMMAND || '';
 const MCP_ARGS = JSON.parse(process.env.MCP_ARGS || '[]');
 const MCP_SERVER_TYPE = process.env.MCP_SERVER_TYPE || '';
 const MCP_HTTP_UPSTREAM = process.env.MCP_HTTP_UPSTREAM || '';
-
-// ─── Connection → env var mappers ────────────────────────────────────────────
-
-/**
- * Given a _connection object and the MCP_SERVER_TYPE, return env var overrides
- * for the child MCP server process.
- */
-function connectionToEnv(conn, serverType) {
-  if (!conn) return {};
-  switch (serverType) {
-    case 'neo4j': {
-      const proto = conn.protocol || 'bolt';
-      return {
-        NEO4J_URI: `${proto}://${conn.host}:${conn.port}`,
-        NEO4J_USERNAME: conn.username,
-        NEO4J_PASSWORD: conn.password,
-        NEO4J_DATABASE: conn.database || 'neo4j',
-      };
-    }
-    case 'postgres': {
-      const ssl = conn.ssl_mode ? `?sslmode=${conn.ssl_mode}` : '';
-      return {
-        DATABASE_URL: `postgresql://${conn.username}:${encodeURIComponent(conn.password)}@${conn.host}:${conn.port}/${conn.database}${ssl}`,
-      };
-    }
-    case 'minio': {
-      return {
-        MINIO_ENDPOINT: `http://${conn.host}:${conn.port}`,
-        MINIO_ACCESS_KEY: conn.username,
-        MINIO_SECRET_KEY: conn.password,
-      };
-    }
-    case 'kafka': {
-      return {
-        KAFKA_BROKERS: `${conn.host}:${conn.port}`,
-        KAFKA_USERNAME: conn.username || '',
-        KAFKA_PASSWORD: conn.password || '',
-      };
-    }
-    case 'grafana': {
-      const proto = conn.protocol || 'https';
-      return {
-        GRAFANA_URL: `${proto}://${conn.host}:${conn.port}`,
-        GRAFANA_API_KEY: conn.password || '',
-      };
-    }
-    default:
-      return {};
-  }
-}
 
 // ─── HTTP upstream proxy (Streamable HTTP MCP transport) ─────────────────────
 
@@ -237,169 +193,14 @@ class MCPHttpUpstreamProxy {
   }
 }
 
-// ─── MCP stdio process manager ───────────────────────────────────────────────
-
-/**
- * Manages a pool of MCP server child processes.
- * - Default process uses env vars from the container
- * - Connection-specific processes get env var overrides
- */
-class MCPProcessManager {
-  constructor() {
-    // Cache: connectionKey -> { process, pending, lastUsed }
-    this.processes = new Map();
-  }
-
-  _connectionKey(conn) {
-    if (!conn) return '__default__';
-    return `${conn.host}:${conn.port}:${conn.database || ''}:${conn.username || ''}`;
-  }
-
-  _buildChildEnv(conn) {
-    // Start with parent env, strip MCP_ENV_ prefix for forwarded vars
-    const env = { ...process.env };
-    for (const [key, val] of Object.entries(process.env)) {
-      if (key.startsWith('MCP_ENV_')) {
-        env[key.slice(8)] = val;
-      }
-    }
-    // Apply connection overrides
-    const overrides = connectionToEnv(conn, MCP_SERVER_TYPE);
-    Object.assign(env, overrides);
-    return env;
-  }
-
-  _spawn(conn) {
-    const env = this._buildChildEnv(conn);
-    const [cmd, ...defaultArgs] = MCP_COMMAND.split(/\s+/);
-    const args = [...defaultArgs, ...MCP_ARGS];
-
-    console.error(`[bridge] Spawning: ${cmd} ${args.join(' ')} (type=${MCP_SERVER_TYPE})`);
-
-    const child = spawn(cmd, args, {
-      env,
-      stdio: ['pipe', 'pipe', 'inherit'],
-    });
-
-    child.on('error', (err) => {
-      console.error(`[bridge] Child process error: ${err.message}`);
-    });
-    child.on('exit', (code) => {
-      console.error(`[bridge] Child process exited with code ${code}`);
-      const key = this._connectionKey(conn);
-      this.processes.delete(key);
-    });
-
-    return {
-      process: child,
-      pending: new Map(), // id -> { resolve, reject }
-      buffer: '',
-      lastUsed: Date.now(),
-      initPromise: null, // memoized MCP initialize handshake
-    };
-  }
-
-  getOrSpawn(conn) {
-    const key = this._connectionKey(conn);
-    let entry = this.processes.get(key);
-    if (!entry || entry.process.killed) {
-      entry = this._spawn(conn);
-      this.processes.set(key, entry);
-      this._setupLineReader(entry);
-    }
-    entry.lastUsed = Date.now();
-    return entry;
-  }
-
-  _setupLineReader(entry) {
-    entry.process.stdout.on('data', (chunk) => {
-      entry.buffer += chunk.toString();
-      let newlineIdx;
-      while ((newlineIdx = entry.buffer.indexOf('\n')) !== -1) {
-        const line = entry.buffer.slice(0, newlineIdx).trim();
-        entry.buffer = entry.buffer.slice(newlineIdx + 1);
-        if (!line) continue;
-        try {
-          const msg = JSON.parse(line);
-          if (msg.id != null && entry.pending.has(msg.id)) {
-            const { resolve } = entry.pending.get(msg.id);
-            entry.pending.delete(msg.id);
-            resolve(msg);
-          }
-        } catch {
-          // Not JSON, ignore
-        }
-      }
-    });
-  }
-
-  async sendRequest(conn, method, params) {
-    const entry = this.getOrSpawn(conn);
-    // The MCP spec requires an initialize handshake before any other request.
-    // Strict servers (e.g. the Python mcp-neo4j-cypher) reject tools/list with
-    // "Received request before initialization was complete" otherwise.
-    await this._ensureInitialized(entry);
-    return this._rawRequest(entry, method, params);
-  }
-
-  // _ensureInitialized runs (once per child) the initialize request + the
-  // initialized notification, memoizing the in-flight handshake so concurrent
-  // callers await the same one.
-  _ensureInitialized(entry) {
-    if (!entry.initPromise) {
-      entry.initPromise = (async () => {
-        await this._rawRequest(entry, 'initialize', {
-          protocolVersion: '2024-11-05',
-          capabilities: {},
-          clientInfo: {
-            name: process.env.BRIDGE_NAME || 'tas-mcp-bridge',
-            version: process.env.BRIDGE_VERSION || '1.0.0',
-          },
-        });
-        this._notify(entry, 'notifications/initialized', {});
-      })().catch((err) => {
-        // Reset so the next request retries the handshake rather than wedging.
-        entry.initPromise = null;
-        throw err;
-      });
-    }
-    return entry.initPromise;
-  }
-
-  // _notify writes a JSON-RPC notification (no id, no response expected).
-  _notify(entry, method, params) {
-    entry.process.stdin.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
-  }
-
-  _rawRequest(entry, method, params) {
-    const id = randomUUID();
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        entry.pending.delete(id);
-        reject(new Error('MCP request timeout (60s)'));
-      }, 60000);
-
-      entry.pending.set(id, {
-        resolve: (msg) => {
-          clearTimeout(timeout);
-          resolve(msg);
-        },
-        reject: (err) => {
-          clearTimeout(timeout);
-          reject(err);
-        },
-      });
-
-      entry.process.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
-    });
-  }
-}
-
 // ─── Select backend mode ────────────────────────────────────────────────────
 
 const useHttpUpstream = !!MCP_HTTP_UPSTREAM;
 const httpProxy = useHttpUpstream ? new MCPHttpUpstreamProxy(MCP_HTTP_UPSTREAM) : null;
-const processManager = useHttpUpstream ? null : new MCPProcessManager();
+const processManager = useHttpUpstream ? null : new MCPProcessManager({
+  command: MCP_COMMAND, args: MCP_ARGS, serverType: MCP_SERVER_TYPE,
+  maxChildren: parseInt(process.env.BRIDGE_MAX_CHILDREN || '32', 10),
+});
 
 // ─── HTTP server ─────────────────────────────────────────────────────────────
 
@@ -424,7 +225,7 @@ async function handleListTools() {
   return { tools: resp.result?.tools || [] };
 }
 
-async function handleCallTool(body) {
+async function handleCallTool(body, tenant) {
   const { name, arguments: args } = JSON.parse(body);
   const cleanArgs = { ...args };
 
@@ -444,10 +245,12 @@ async function handleCallTool(body) {
     return resp.result || { content: [{ type: 'text', text: 'No result' }] };
   }
 
+  // The child is chosen by the whole connection (password included) and the
+  // tenant the tas-mcp proxy names, never by host/port/database/user alone.
   const resp = await processManager.sendRequest(conn, 'tools/call', {
     name,
     arguments: cleanArgs,
-  });
+  }, tenant);
 
   if (resp.error) {
     return { content: [{ type: 'text', text: `Error: ${resp.error.message || JSON.stringify(resp.error)}` }], isError: true };
@@ -484,7 +287,7 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify(result));
     } else if (req.url === '/mcp/tools/call' && req.method === 'POST') {
       const body = await readBody(req);
-      const result = await handleCallTool(body);
+      const result = await handleCallTool(body, tenantOf(req.headers));
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     } else {
@@ -498,12 +301,14 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-if (!MCP_COMMAND && !MCP_HTTP_UPSTREAM) {
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isMain && !MCP_COMMAND && !MCP_HTTP_UPSTREAM) {
   console.error('[bridge] ERROR: Either MCP_COMMAND or MCP_HTTP_UPSTREAM env var is required');
   process.exit(1);
 }
 
-server.listen(BRIDGE_PORT, () => {
+if (isMain) server.listen(BRIDGE_PORT, () => {
   console.error(`[bridge] TAS MCP Bridge v2.1 listening on port ${BRIDGE_PORT}`);
   console.error(`[bridge] Server type: ${MCP_SERVER_TYPE || '(none)'}`);
   if (useHttpUpstream) {
