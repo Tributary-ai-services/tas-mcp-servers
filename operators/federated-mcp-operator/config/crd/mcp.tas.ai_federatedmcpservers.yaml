@@ -29,6 +29,9 @@ spec:
     - jsonPath: .status.registered
       name: Registered
       type: boolean
+    - jsonPath: .status.conditions[?(@.type=="Reachable")].status
+      name: Reachable
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date

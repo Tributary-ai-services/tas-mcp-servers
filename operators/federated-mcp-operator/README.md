@@ -38,6 +38,25 @@ controller-runtime and mirrors the other TAS operators
   one interval of a restart even with no CR changes.
 - **Status** → `.status.phase` (`Pending`/`Registered`/`Failed`),
   `.status.registered`, `.status.registeredID`, and a `Registered` condition.
+- **Reachability** → a `Reachable` condition (and a `REACHABLE` column in
+  `kubectl get fms`) set from the gateway's own probe of the server
+  (`initialize` + `tools/list` every 60 s; tas-mcp `SERVER_PROBES_ENABLED`),
+  read from the `probe` block of the same `GET /servers/{id}` the drift check
+  makes. `Registered` only means the gateway accepted the registration; read
+  `Reachable` for health. From 2026-11-03 to 2026-11-19 every CR said
+  `Registered` while the gateway reached 1 of its 12 servers (MCP-14).
+
+  | Status | Reason | Meaning |
+  |---|---|---|
+  | `True` | `ProbeSucceeded` | the last probe passed |
+  | `False` | `ProbeFailed` | the last probe failed; the message names the step and error |
+  | `Unknown` | `ProbeUnavailable` | the gateway has no probe for it (probes off, or first probe pending) |
+  | `Unknown` | `ProbeStale` | the last probe is older than max(3 × probe interval, 3 min) |
+  | `Unknown` | `NotRegistered` | registration failed, so nothing probes it |
+
+  Each gateway replica probes on its own and the GET lands on any replica,
+  so the condition reflects that replica's last probe. It refreshes on
+  `--resync-interval`, and status is written only when it changes.
 
 ## CRD
 

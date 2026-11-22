@@ -73,11 +73,19 @@ func requireEnvtest(t *testing.T) {
 type fakeGateway struct {
 	mu      sync.Mutex
 	servers map[string]gateway.Server
+	probes  map[string]*gateway.Probe
 	srv     *httptest.Server
 }
 
+// setProbe makes GET /servers/{id} carry a probe block (nil removes it).
+func (f *fakeGateway) setProbe(id string, p *gateway.Probe) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.probes[id] = p
+}
+
 func newFakeGateway() *fakeGateway {
-	f := &fakeGateway{servers: map[string]gateway.Server{}}
+	f := &fakeGateway{servers: map[string]gateway.Server{}, probes: map[string]*gateway.Probe{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/federation/servers", f.handleCollection)
 	mux.HandleFunc("/api/v1/federation/servers/", f.handleItem)
@@ -136,11 +144,17 @@ func (f *fakeGateway) handleItem(w http.ResponseWriter, r *http.Request) {
 	defer f.mu.Unlock()
 	switch r.Method {
 	case http.MethodGet:
-		if _, ok := f.servers[id]; !ok {
+		s, ok := f.servers[id]
+		if !ok {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(struct {
+			gateway.Server
+			Probe *gateway.Probe `json:"probe,omitempty"`
+		}{s, f.probes[id]})
 	case http.MethodDelete:
 		if _, ok := f.servers[id]; !ok {
 			http.Error(w, "not found", http.StatusNotFound)
