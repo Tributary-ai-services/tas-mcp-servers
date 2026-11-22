@@ -24,7 +24,7 @@ var ErrAlreadyRegistered = errors.New("server already registered")
 // AdminTokenHeader carries tas-mcp's MCP_ADMIN_TOKEN. With MCP_TENANT_SERVERS
 // on, the gateway refuses register and delete without it (401/403), and a GET
 // without it sees only platform servers (Plan #22 C.1).
-const AdminTokenHeader = "TAS-MCP-Admin-Token" //nolint:gosec // a header name
+const AdminTokenHeader = "TAS-MCP-Admin-Token" // #nosec G101 -- a header name, not a credential
 
 // ManagedByOperator marks a registry row as this operator's (Plan #22 C.2).
 // The operator writes it on every row it registers and touches no row that
