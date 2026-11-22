@@ -33,7 +33,7 @@ spec:
                     values: ["compute"]
       containers:
         - name: operator
-          image: registry-api.tas.scharber.com/federated-mcp-operator:0.2.0
+          image: registry-api.tas.scharber.com/federated-mcp-operator:0.3.0@sha256:2d89cc1b08fdd316e613dab942e2ba437c82e994832815b5f7a24f1d812e0d90
           args:
             - --leader-elect
             - --gateway-url=http://prod-tas-mcp-http.tas-mcp-prod.svc.cluster.local:8082
