@@ -42,7 +42,7 @@ spec:
                     values: ["compute"]
       containers:
       - name: neo4j-mcp
-        image: registry-api.tas.scharber.com/tas-mcp-bridge:1.1.0
+        image: registry-api.tas.scharber.com/tas-mcp-bridge:1.2.0@sha256:c32160deca2231cfb2f267248e122fde49826340929f168877680954b76ae580
         imagePullPolicy: Always
         ports:
         - containerPort: 8000
