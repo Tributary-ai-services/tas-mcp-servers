@@ -2,6 +2,13 @@
 // federation gateway's registry. Each CR describes one downstream MCP server;
 // the controller keeps the gateway in sync — registering on create/update,
 // unregistering on delete (guarded by a finalizer).
+//
+// Ownership (Plan #22 C.2): every row the operator writes carries
+// managed_by=operator, and the operator never updates or deletes a row whose
+// managed_by is anything else (a server configured in AIQG). A CR whose id
+// collides with such a row reports phase Failed with Registered=False reason
+// ManagedByAIQG, requeues at the resync interval, and leaves
+// the row alone, so the operator's drift healing never fights the UI.
 package controllers
 
 import (
@@ -72,7 +79,7 @@ func (r *FederatedMCPServerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	if !fms.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&fms, finalizerName) {
 			id := registeredID(&fms)
-			if err := r.Gateway.Unregister(ctx, id); err != nil {
+			if err := r.unregisterOwn(ctx, id); err != nil {
 				logger.Error(err, "unregister from gateway failed; will retry", "id", id)
 				return ctrl.Result{RequeueAfter: requeueAfterError}, nil
 			}
@@ -114,6 +121,9 @@ func (r *FederatedMCPServerReconciler) Reconcile(ctx context.Context, req ctrl.R
 			logger.Error(err, "gateway drift check failed; will retry", "id", server.ID)
 			return ctrl.Result{RequeueAfter: requeueAfterError}, nil
 		}
+		if exists && state.ManagedByOther() {
+			return r.conflict(ctx, &fms, server.ID, state.ManagedBy)
+		}
 		if exists {
 			// Registered is not healthy: report what the gateway's probe saw.
 			if setReachable(&fms, state, time.Now()) {
@@ -130,7 +140,7 @@ func (r *FederatedMCPServerReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// --- If the id changed, unregister the old id first.
 	if fms.Status.RegisteredID != "" && fms.Status.RegisteredID != server.ID {
-		if err := r.Gateway.Unregister(ctx, fms.Status.RegisteredID); err != nil {
+		if err := r.unregisterOwn(ctx, fms.Status.RegisteredID); err != nil {
 			return r.fail(ctx, &fms, "UnregisterOld", err)
 		}
 	}
@@ -138,6 +148,13 @@ func (r *FederatedMCPServerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// --- Register (idempotent): on a duplicate, re-register to pick up changes.
 	if err := r.Gateway.Register(ctx, server); err != nil {
 		if errors.Is(err, gateway.ErrAlreadyRegistered) {
+			state, _, gerr := r.Gateway.Get(ctx, server.ID)
+			if gerr != nil {
+				return r.fail(ctx, &fms, "OwnershipCheck", gerr)
+			}
+			if state.ManagedByOther() {
+				return r.conflict(ctx, &fms, server.ID, state.ManagedBy)
+			}
 			if uerr := r.Gateway.Unregister(ctx, server.ID); uerr != nil {
 				return r.fail(ctx, &fms, "ReregisterUnregister", uerr)
 			}
@@ -182,7 +199,47 @@ func (r *FederatedMCPServerReconciler) buildServer(ctx context.Context, fms *mcp
 		Tags:         fms.Spec.Tags,
 		Metadata:     fms.Spec.Metadata,
 		Reduce:       fms.Spec.Reduce,
+		ManagedBy:    gateway.ManagedByOperator,
 	}, nil
+}
+
+// unregisterOwn deletes id from the gateway unless the row is managed by
+// someone else (AIQG), which it leaves in place. Absent is success.
+func (r *FederatedMCPServerReconciler) unregisterOwn(ctx context.Context, id string) error {
+	state, exists, err := r.Gateway.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	if state.ManagedByOther() {
+		log.FromContext(ctx).Info("leaving a gateway row managed elsewhere in place",
+			"id", id, "managed_by", state.ManagedBy)
+		return nil
+	}
+	return r.Gateway.Unregister(ctx, id)
+}
+
+// conflict reports that the CR's id belongs to a row the operator does not
+// manage, and requeues at the resync interval without touching the row.
+func (r *FederatedMCPServerReconciler) conflict(ctx context.Context, fms *mcpv1.FederatedMCPServer, id, owner string) (ctrl.Result, error) {
+	msg := fmt.Sprintf("gateway server %q is managed_by %q; the operator leaves it alone (rename spec.serverID or remove the row in AIQG)", id, owner)
+	log.FromContext(ctx).Info("server id is managed elsewhere; not registering", "id", id, "managed_by", owner)
+	// The CRD's phase enum is Pending|Registered|Failed and C.2 makes no CRD
+	// change, so the conflict is Failed; the Registered condition's reason
+	// (ManagedByAIQG) is what tells it apart from a gateway error.
+	fms.Status.Phase = "Failed"
+	fms.Status.Registered = false
+	fms.Status.ObservedGeneration = fms.Generation
+	fms.Status.LastError = msg
+	setCondition(fms, "Registered", metav1.ConditionFalse, "ManagedByAIQG", msg)
+	setCondition(fms, ConditionReachable, metav1.ConditionUnknown, "NotRegistered",
+		"The gateway row for this id is not the operator's")
+	if err := r.Status().Update(ctx, fms); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{RequeueAfter: r.resyncInterval()}, nil
 }
 
 func (r *FederatedMCPServerReconciler) markRegistered(ctx context.Context, fms *mcpv1.FederatedMCPServer, id string) (ctrl.Result, error) {

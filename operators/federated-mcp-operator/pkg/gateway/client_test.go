@@ -124,3 +124,40 @@ func TestGet_Probe(t *testing.T) {
 		}
 	}
 }
+
+// Plan #22 C.2: the admin token rides on every call when configured, and on
+// none when it is not (a gateway without MCP_TENANT_SERVERS).
+func TestAdminToken_SentOnEveryCall(t *testing.T) {
+	var seen []string
+	c, srv := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.Header.Get(AdminTokenHeader))
+		if r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	defer srv.Close()
+	ctx := context.Background()
+
+	c.WithAdminToken("tok")
+	_ = c.Register(ctx, Server{ID: "a"})
+	_, _, _ = c.Get(ctx, "a")
+	_ = c.Unregister(ctx, "a")
+	c.WithAdminToken("")
+	_, _, _ = c.Get(ctx, "a")
+	if len(seen) != 4 || seen[0] != "tok" || seen[1] != "tok" || seen[2] != "tok" || seen[3] != "" {
+		t.Fatalf("token headers = %q", seen)
+	}
+}
+
+func TestState_ManagedByOther(t *testing.T) {
+	for v, want := range map[string]bool{"": false, ManagedByOperator: false, "aiqg": true} {
+		if got := (&State{ManagedBy: v}).ManagedByOther(); got != want {
+			t.Errorf("ManagedBy %q: got %v", v, got)
+		}
+	}
+	if (*State)(nil).ManagedByOther() {
+		t.Error("nil state is not foreign")
+	}
+}

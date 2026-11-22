@@ -75,6 +75,32 @@ type fakeGateway struct {
 	servers map[string]gateway.Server
 	probes  map[string]*gateway.Probe
 	srv     *httptest.Server
+	// adminToken, when set, is required on every request, as tas-mcp does
+	// with MCP_TENANT_SERVERS on (Plan #22 C.1).
+	adminToken string
+}
+
+// putRow writes a row directly, as another writer (AIQG) would.
+func (f *fakeGateway) putRow(s gateway.Server) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.servers[s.ID] = s
+}
+
+// authorized enforces adminToken; it reports whether the request may go on.
+func (f *fakeGateway) authorized(w http.ResponseWriter, r *http.Request) bool {
+	if f.adminToken == "" {
+		return true
+	}
+	switch r.Header.Get(gateway.AdminTokenHeader) {
+	case f.adminToken:
+		return true
+	case "":
+		http.Error(w, "missing token", http.StatusUnauthorized)
+	default:
+		http.Error(w, "invalid token", http.StatusForbidden)
+	}
+	return false
 }
 
 // setProbe makes GET /servers/{id} carry a probe block (nil removes it).
@@ -119,6 +145,9 @@ func (f *fakeGateway) get(id string) (gateway.Server, bool) {
 }
 
 func (f *fakeGateway) handleCollection(w http.ResponseWriter, r *http.Request) {
+	if !f.authorized(w, r) {
+		return
+	}
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -139,6 +168,9 @@ func (f *fakeGateway) handleCollection(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *fakeGateway) handleItem(w http.ResponseWriter, r *http.Request) {
+	if !f.authorized(w, r) {
+		return
+	}
 	id := strings.TrimPrefix(r.URL.Path, "/api/v1/federation/servers/")
 	f.mu.Lock()
 	defer f.mu.Unlock()
