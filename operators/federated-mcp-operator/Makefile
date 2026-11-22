@@ -1,4 +1,4 @@
-IMG ?= registry-api.tas.scharber.com/federated-mcp-operator:0.3.0
+IMG ?= registry-api.tas.scharber.com/federated-mcp-operator:0.4.0
 CONTROLLER_GEN ?= $(shell go env GOPATH)/bin/controller-gen
 SETUP_ENVTEST ?= $(shell go env GOPATH)/bin/setup-envtest
 ENVTEST_K8S_VERSION ?= 1.29.x
