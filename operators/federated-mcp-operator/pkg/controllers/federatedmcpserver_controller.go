@@ -7,6 +7,7 @@ package controllers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -108,12 +109,18 @@ func (r *FederatedMCPServerReconciler) Reconcile(ctx context.Context, req ctrl.R
 		fms.Status.ObservedGeneration == fms.Generation &&
 		fms.Status.RegisteredID == server.ID
 	if specUnchanged {
-		exists, err := r.Gateway.Exists(ctx, server.ID)
+		state, exists, err := r.Gateway.Get(ctx, server.ID)
 		if err != nil {
 			logger.Error(err, "gateway drift check failed; will retry", "id", server.ID)
 			return ctrl.Result{RequeueAfter: requeueAfterError}, nil
 		}
 		if exists {
+			// Registered is not healthy: report what the gateway's probe saw.
+			if setReachable(&fms, state, time.Now()) {
+				if err := r.Status().Update(ctx, &fms); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
 			return ctrl.Result{RequeueAfter: r.resyncInterval()}, nil
 		}
 		logger.Info("gateway is missing a registered server; re-registering (drift)",
@@ -187,6 +194,9 @@ func (r *FederatedMCPServerReconciler) markRegistered(ctx context.Context, fms *
 	fms.Status.LastRegisteredTime = &now
 	fms.Status.LastError = ""
 	setCondition(fms, "Registered", metav1.ConditionTrue, "Synced", "Server registered with the gateway")
+	// A fresh registration has not been probed yet; the next resync reads
+	// the gateway's probe. Until then reachability is Unknown, not assumed.
+	setReachable(fms, nil, time.Now())
 	if err := r.Status().Update(ctx, fms); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -200,6 +210,8 @@ func (r *FederatedMCPServerReconciler) fail(ctx context.Context, fms *mcpv1.Fede
 	fms.Status.ObservedGeneration = fms.Generation
 	fms.Status.LastError = cause.Error()
 	setCondition(fms, "Registered", metav1.ConditionFalse, reason, cause.Error())
+	setCondition(fms, ConditionReachable, metav1.ConditionUnknown, "NotRegistered",
+		"The gateway does not have this server, so nothing probes it")
 	if err := r.Status().Update(ctx, fms); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -240,6 +252,63 @@ func emptyDefault(v, def string) string {
 		return def
 	}
 	return v
+}
+
+// ConditionReachable is true when the gateway's last probe of the server
+// (initialize + tools/list, tas-mcp Plan #22 T.4) passed. Registered only
+// says the gateway accepted the registration: from 2026-11-03 to 2026-11-19
+// every CR said Registered while the gateway reached 1 of its 12 servers
+// (MCP-14). Reachable is the condition to read for health.
+const ConditionReachable = "Reachable"
+
+// minStaleAfter is the floor for treating a probe result as stale; the
+// effective threshold is max(3 x the gateway's probe interval, this).
+const minStaleAfter = 3 * time.Minute
+
+// setReachable sets the Reachable condition from the gateway's probe of the
+// server and reports whether the condition changed (so the caller writes
+// status only on a change, not on every resync). Messages carry no timings,
+// so an unchanged state never rewrites the condition.
+func setReachable(fms *mcpv1.FederatedMCPServer, st *gateway.State, now time.Time) bool {
+	status, reason, msg := reachability(st, now)
+	before := findCondition(fms, ConditionReachable)
+	if before != nil && before.Status == status && before.Reason == reason &&
+		before.Message == msg && before.ObservedGeneration == fms.Generation {
+		return false
+	}
+	setCondition(fms, ConditionReachable, status, reason, msg)
+	return true
+}
+
+func reachability(st *gateway.State, now time.Time) (status metav1.ConditionStatus, reason, msg string) {
+	if st == nil || st.Probe == nil {
+		return metav1.ConditionUnknown, "ProbeUnavailable",
+			"The gateway reports no probe for this server (SERVER_PROBES_ENABLED off, or the first probe is pending)"
+	}
+	p := st.Probe
+	staleAfter := minStaleAfter
+	if d := 3 * time.Duration(p.IntervalSeconds) * time.Second; d > staleAfter {
+		staleAfter = d
+	}
+	if now.Sub(p.CheckedAt) > staleAfter {
+		return metav1.ConditionUnknown, "ProbeStale",
+			fmt.Sprintf("The gateway's last probe is older than %s", staleAfter)
+	}
+	if p.Up {
+		return metav1.ConditionTrue, "ProbeSucceeded",
+			fmt.Sprintf("initialize and tools/list passed; %d tools", p.ToolCount)
+	}
+	return metav1.ConditionFalse, "ProbeFailed",
+		fmt.Sprintf("%s failed: %s", emptyDefault(p.Stage, "probe"), p.Error)
+}
+
+func findCondition(fms *mcpv1.FederatedMCPServer, condType string) *metav1.Condition {
+	for i := range fms.Status.Conditions {
+		if fms.Status.Conditions[i].Type == condType {
+			return &fms.Status.Conditions[i]
+		}
+	}
+	return nil
 }
 
 func setCondition(fms *mcpv1.FederatedMCPServer, condType string, status metav1.ConditionStatus, reason, msg string) {

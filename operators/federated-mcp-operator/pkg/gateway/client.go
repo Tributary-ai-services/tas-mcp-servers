@@ -101,31 +101,72 @@ func (c *Client) Register(ctx context.Context, s Server) error {
 	}
 }
 
+// Probe is the gateway's last reachability probe of a server (tas-mcp Plan #22
+// T.4): initialize + tools/list, as a client would. JSON tags match tas-mcp's
+// federation.ProbeResult.
+type Probe struct {
+	Up                  bool       `json:"up"`
+	Stage               string     `json:"stage,omitempty"`
+	Error               string     `json:"error,omitempty"`
+	CheckedAt           time.Time  `json:"checked_at"`
+	DurationMS          int64      `json:"duration_ms"`
+	LastUpAt            *time.Time `json:"last_up_at,omitempty"`
+	ConsecutiveFailures int        `json:"consecutive_failures"`
+	ToolCount           int        `json:"tool_count"`
+	IntervalSeconds     int        `json:"interval_seconds"`
+}
+
+// State is what GET /api/v1/federation/servers/{id} reports about a server.
+type State struct {
+	// Probe is nil when the gateway does not probe (SERVER_PROBES_ENABLED
+	// off, or a gateway older than T.4) or has not probed the server yet.
+	Probe *Probe `json:"probe,omitempty"`
+}
+
 // Exists reports whether the gateway currently has a server with this id. It is
 // the drift signal: the gateway's registry is in-memory, so a gateway restart
 // drops every registration, and the operator uses this to detect that a
 // previously-registered server is missing and must be re-registered.
 func (c *Client) Exists(ctx context.Context, id string) (bool, error) {
+	_, ok, err := c.Get(ctx, id)
+	return ok, err
+}
+
+// Get returns the gateway's view of a server: ok=false on 404 (not
+// registered), and the server's probe result when the gateway has one. One
+// request answers both drift ("is it registered?") and reachability ("does
+// it answer?").
+func (c *Client) Get(ctx context.Context, id string) (*State, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		c.baseURL+"/api/v1/federation/servers/"+id, nil)
+		c.baseURL+"/api/v1/federation/servers/"+id, http.NoBody)
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return false, fmt.Errorf("get request: %w", err)
+		return nil, false, fmt.Errorf("get request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	switch resp.StatusCode {
 	case http.StatusOK:
-		return true, nil
+		st := &State{}
+		b, rerr := io.ReadAll(io.LimitReader(resp.Body, maxGetBody))
+		if rerr == nil && len(bytes.TrimSpace(b)) > 0 {
+			// A body we cannot read still proves the server is registered;
+			// it only leaves reachability unknown.
+			_ = json.Unmarshal(b, st)
+		}
+		return st, true, nil
 	case http.StatusNotFound:
-		return false, nil
+		return nil, false, nil
 	default:
-		return false, fmt.Errorf("get failed: %s: %s", resp.Status, readBody(resp.Body))
+		return nil, false, fmt.Errorf("get failed: %s: %s", resp.Status, readBody(resp.Body))
 	}
 }
+
+// maxGetBody bounds a GET server response (a server definition is small).
+const maxGetBody = 1 << 20
 
 // Unregister DELETEs a server from the gateway registry. A 404 is treated as
 // success (already gone) so the operation is idempotent.

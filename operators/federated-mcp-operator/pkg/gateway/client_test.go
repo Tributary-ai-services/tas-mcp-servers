@@ -98,3 +98,29 @@ func TestExists_DriftSignal(t *testing.T) {
 		srv.Close()
 	}
 }
+
+// Get carries the gateway's probe block (tas-mcp Plan #22 T.4), and a body
+// without one (an older gateway, or probes off) leaves Probe nil.
+func TestGet_Probe(t *testing.T) {
+	bodies := map[string]bool{
+		`{"id":"git","probe":{"up":false,"stage":"tools/list","error":"refused","checked_at":"2026-11-21T18:00:00Z","interval_seconds":60}}`: true,
+		`{"id":"git"}`: false,
+		``:             false,
+	}
+	for body, hasProbe := range bodies {
+		c, srv := newTestClient(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(body))
+		})
+		st, ok, err := c.Get(context.Background(), "git")
+		srv.Close()
+		if err != nil || !ok || st == nil {
+			t.Fatalf("%q: st=%v ok=%v err=%v", body, st, ok, err)
+		}
+		if (st.Probe != nil) != hasProbe {
+			t.Fatalf("%q: probe=%+v, want present=%v", body, st.Probe, hasProbe)
+		}
+		if hasProbe && (st.Probe.Up || st.Probe.Stage != "tools/list" || st.Probe.IntervalSeconds != 60 || st.Probe.CheckedAt.IsZero()) {
+			t.Errorf("probe decoded wrong: %+v", st.Probe)
+		}
+	}
+}

@@ -125,6 +125,7 @@ type FederatedMCPServerStatus struct {
 //+kubebuilder:printcolumn:name="Protocol",type="string",JSONPath=".spec.protocol"
 //+kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 //+kubebuilder:printcolumn:name="Registered",type="boolean",JSONPath=".status.registered"
+//+kubebuilder:printcolumn:name="Reachable",type="string",JSONPath=`.status.conditions[?(@.type=="Reachable")].status`
 //+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 //+kubebuilder:resource:shortName=fms
 
