@@ -56,6 +56,18 @@ spec:
               value: "postgres-mcp"
             - name: BRIDGE_VERSION
               value: "1.1.0"
+            # MCP-19: check every _connection's host:port, and the addresses it
+            # resolves to, before a child dials it; dial the checked address
+            # (DNS rebinding). Read by the first bridge image with
+            # src/egress.js; the 1.2.0 image above ignores both. The value must
+            # equal MCP_DSN_EGRESS_ALLOW on the tas-mcp proxy and
+            # aiqg-dashboard-be. Opens the shared PostgreSQL only: Redis,
+            # Keycloak, Kafka and MinIO in tas-shared stay refused. No
+            # MCP_TENANT_EGRESS_ALLOWLIST (no external hosts), as on the proxy.
+            - name: BRIDGE_DSN_EGRESS
+              value: "enforce"
+            - name: MCP_DSN_EGRESS_ALLOW
+              value: "postgres-shared.tas-shared.svc.cluster.local:5432"
           envFrom:
             - configMapRef:
                 name: postgres-mcp-config
