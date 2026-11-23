@@ -1,0 +1,59 @@
+# MCP-19 re-review: only the tas-mcp proxy may call postgres-mcp.
+#
+# The bridge takes a _connection in every tools/call and dials it. The proxy
+# strips a caller's _connection and injects only a stored, egress-checked one
+# (SEC-38, MCP-19), but the Service is a plain ClusterIP with no auth, so
+# until this policy any pod in the cluster could make postgres-mcp connect to
+# any host:port with any credentials (live on tas-mcp-bridge 1.2.0).
+#
+# Admitted: the prod proxy pods (tas-mcp-prod, app=tas-mcp,
+# component=mcp-server), which also run the T.4 server probes, on TCP 8000.
+# Kubelet probes are not affected (checked 2026-11-23 on both nodes with a
+# throwaway pod under the same policy shape: Ready, proxy reached it, a pod in
+# aether-be was refused).
+#
+# Cut off by this policy (both had 0 calls in Loki over the 28 days before
+# 2026-11-23):
+#   - aether-be (app=aether-backend): InvokeTool / TestConnection for
+#     "mcp-postgres" with a saved connection (POSTGRES_MCP_BASE_URL). It
+#     needs C.6 (aether-be#76: call through the proxy with the delegate
+#     credential) before it can use postgres-mcp again; until then the
+#     SQL console path is dbhub.
+#   - datasource-operator (tas-mcp-servers, app=datasource-operator):
+#     connection tests for DatasourceConnection CRs of type postgres. There
+#     are no DatasourceConnection CRs today. To test one again it needs an
+#     ingress rule here (podSelector app=datasource-operator) or to go
+#     through the proxy.
+#
+# Standalone: apply this file on its own (kubectl apply -f), ahead of the
+# bridge image. Never apply the whole k8s/postgres-mcp directory: secret.yaml
+# renders an empty Secret and would delete DATABASE_URL (see aether-shared
+# monitoring.yaml, TASDriftRising).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-mcp-ingress
+  namespace: tas-mcp-servers
+  labels:
+    app: postgres-mcp
+    component: mcp-server
+    service: postgres-mcp
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres-mcp
+      service: postgres-mcp
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: tas-mcp-prod
+          podSelector:
+            matchLabels:
+              app: tas-mcp
+              component: mcp-server
+      ports:
+        - port: 8000
+          protocol: TCP
