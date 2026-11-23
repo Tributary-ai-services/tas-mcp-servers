@@ -19,6 +19,8 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 
+import { formatAddr, parseAddr } from './egress.js';
+
 /**
  * Given a _connection object and the MCP_SERVER_TYPE, return env var overrides
  * for the child MCP server process.
@@ -79,9 +81,19 @@ export function postgresURL(conn) {
   if (!/^[A-Za-z0-9.:[\]-]+$/.test(host)) throw new Error('postgres connection host is not a plain host');
   const port = Number(conn.port);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('postgres connection port is not a port');
+  // The host the URL must end up holding: an IPv6 literal canonical and
+  // bracketed, anything else exactly as given.
+  let want = host;
+  if (host.includes(':')) {
+    const a = parseAddr(host);
+    if (!a || a.v !== 6) throw new Error('postgres connection host is not a plain host');
+    want = `[${formatAddr(a)}]`;
+  }
   const u = new URL('postgresql://placeholder');
-  // An IPv6 literal needs brackets in a URL; a name or IPv4 address does not.
-  u.hostname = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+  u.hostname = want;
+  // A host the URL API cannot hold is ignored by the setter, which would
+  // leave the literal "placeholder" in the URL: refuse instead.
+  if (u.hostname !== want) throw new Error('postgres connection host is not a plain host');
   u.port = String(port);
   // encodeURIComponent first: the userinfo setters leave % & = unencoded,
   // which pg would then decode into something else.

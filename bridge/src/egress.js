@@ -358,6 +358,14 @@ export function checkAddresses(kind, addresses) {
 //     the host name (pg treats every one of them as verify-full)
 //                                      -> the name is kept: pinning would fail
 //     the certificate check, and TLS identity refuses a rebound target.
+//
+// Two limits of pinning, which matter for no-verify (TLS without verification)
+// most, since that is the TLS mode that is pinned:
+//   - the client connects to an IP, so it sends no SNI. A provider that routes
+//     by SNI (some managed/serverless Postgres fronts) cannot route the
+//     connection; such a host needs require/verify-full, which keep the name.
+//   - only the first resolved address is used: every address is checked, but
+//     there is no fallback to the others if the first is down.
 const SSL_MODES = new Set(['', 'disable', 'no-verify', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full']);
 const VERIFYING_SSL = new Set(['allow', 'prefer', 'require', 'verify-ca', 'verify-full']);
 

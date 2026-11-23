@@ -202,3 +202,16 @@ test('connectionToEnv: no field spills into another URL part', () => {
   assert.equal(decodeURIComponent(u.username), 'u:x@redis-shared.tas-shared.svc.cluster.local:6379/d#');
   assert.equal(u.hash, '');
 });
+
+// A host the URL API cannot hold must never become the literal "placeholder".
+test('postgresURL: the URL holds exactly the intended host', () => {
+  const mk = (host) => postgresURL({ host, port: 5432, username: 'u', password: 'p', database: 'd' });
+  for (const host of ['[::1', 'a:b', '::1]', '1:2:3', '[10.0.0.1]']) {
+    assert.throws(() => mk(host), /not a plain host/, host);
+  }
+  assert.equal(new URL(mk('2001:DB8::1')).hostname, '[2001:db8::1]');
+  assert.equal(new URL(mk('[2001:db8::1]')).hostname, '[2001:db8::1]');
+  assert.equal(new URL(mk('10.43.109.5')).hostname, '10.43.109.5');
+  assert.equal(new URL(mk('postgres-shared.tas-shared.svc.cluster.local')).hostname, 'postgres-shared.tas-shared.svc.cluster.local');
+  assert.ok(!mk('Pg.Example').includes('placeholder'));
+});
