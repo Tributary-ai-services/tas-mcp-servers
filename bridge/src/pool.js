@@ -19,6 +19,8 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 
+import { formatAddr, parseAddr } from './egress.js';
+
 /**
  * Given a _connection object and the MCP_SERVER_TYPE, return env var overrides
  * for the child MCP server process.
@@ -35,12 +37,8 @@ export function connectionToEnv(conn, serverType) {
         NEO4J_DATABASE: conn.database || 'neo4j',
       };
     }
-    case 'postgres': {
-      const ssl = conn.ssl_mode ? `?sslmode=${conn.ssl_mode}` : '';
-      return {
-        DATABASE_URL: `postgresql://${conn.username}:${encodeURIComponent(conn.password)}@${conn.host}:${conn.port}/${conn.database}${ssl}`,
-      };
-    }
+    case 'postgres':
+      return { DATABASE_URL: postgresURL(conn) };
     case 'minio': {
       return {
         MINIO_ENDPOINT: `http://${conn.host}:${conn.port}`,
@@ -65,6 +63,45 @@ export function connectionToEnv(conn, serverType) {
     default:
       return {};
   }
+}
+
+/**
+ * postgresURL builds the child's DATABASE_URL with the URL API: every part is
+ * set through its own setter, so it is encoded for that part and cannot spill
+ * into another (MCP-19 re-review: a template with only the password escaped
+ * let a user name, database or ssl_mode rewrite the host, port or query).
+ * The query carries sslmode and nothing else. With BRIDGE_DSN_EGRESS=enforce
+ * the fields were validated first (egress.js checkFields); this is the second
+ * line, and the only one when enforcement is off.
+ */
+export function postgresURL(conn) {
+  const host = String(conn.host ?? '');
+  // The URL setters drop what they cannot hold instead of failing (a host of
+  // "a.b/c" becomes "a.b"), so refuse anything but a plain host and port.
+  if (!/^[A-Za-z0-9.:[\]-]+$/.test(host)) throw new Error('postgres connection host is not a plain host');
+  const port = Number(conn.port);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('postgres connection port is not a port');
+  // The host the URL must end up holding: an IPv6 literal canonical and
+  // bracketed, anything else exactly as given.
+  let want = host;
+  if (host.includes(':')) {
+    const a = parseAddr(host);
+    if (!a || a.v !== 6) throw new Error('postgres connection host is not a plain host');
+    want = `[${formatAddr(a)}]`;
+  }
+  const u = new URL('postgresql://placeholder');
+  u.hostname = want;
+  // A host the URL API cannot hold is ignored by the setter, which would
+  // leave the literal "placeholder" in the URL: refuse instead.
+  if (u.hostname !== want) throw new Error('postgres connection host is not a plain host');
+  u.port = String(port);
+  // encodeURIComponent first: the userinfo setters leave % & = unencoded,
+  // which pg would then decode into something else.
+  u.username = encodeURIComponent(String(conn.username ?? ''));
+  u.password = encodeURIComponent(String(conn.password ?? ''));
+  u.pathname = `/${encodeURIComponent(String(conn.database ?? ''))}`;
+  if (conn.ssl_mode) u.searchParams.set('sslmode', String(conn.ssl_mode));
+  return u.href;
 }
 
 /** The default (no _connection) child's key. */

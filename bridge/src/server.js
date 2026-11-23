@@ -16,6 +16,10 @@
  *   BRIDGE_PORT        - HTTP port (default: 8000)
  *   MCP_ENV_*          - Extra env vars forwarded to child process (strip MCP_ENV_ prefix)
  *   BRIDGE_MAX_CHILDREN - Most connection-specific child processes kept (default 32, LRU-evicted)
+ *   BRIDGE_DSN_EGRESS  - "enforce" checks every _connection's host:port before dialing
+ *                        (MCP-19, src/egress.js); unset = off. With it:
+ *   MCP_DSN_EGRESS_ALLOW, MCP_TENANT_EGRESS_ALLOWLIST, MCP_TENANT_CLUSTER_NAMESPACES
+ *                      - the same values the tas-mcp proxy and aiqg-dashboard-be read
  *
  * Child processes are keyed by a hash of the whole _connection (password
  * included) plus the TAS-Tenant-Id the tas-mcp proxy sends; see src/pool.js.
@@ -29,12 +33,15 @@ import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
 import { MCPProcessManager, tenantOf } from './pool.js';
+import { EgressError, guardConnection, loadEgressRule } from './egress.js';
 
 const BRIDGE_PORT = parseInt(process.env.BRIDGE_PORT || '8000', 10);
 const MCP_COMMAND = process.env.MCP_COMMAND || '';
 const MCP_ARGS = JSON.parse(process.env.MCP_ARGS || '[]');
 const MCP_SERVER_TYPE = process.env.MCP_SERVER_TYPE || '';
 const MCP_HTTP_UPSTREAM = process.env.MCP_HTTP_UPSTREAM || '';
+// MCP-19: null unless BRIDGE_DSN_EGRESS=enforce. Config errors fail closed.
+const EGRESS_RULE = loadEgressRule(process.env);
 
 // ─── HTTP upstream proxy (Streamable HTTP MCP transport) ─────────────────────
 
@@ -225,13 +232,26 @@ async function handleListTools() {
   return { tools: resp.result?.tools || [] };
 }
 
-async function handleCallTool(body, tenant) {
+export async function handleCallTool(body, tenant, { rule = EGRESS_RULE, lookup } = {}) {
   const { name, arguments: args } = JSON.parse(body);
   const cleanArgs = { ...args };
 
   // Extract _connection if present
-  const conn = cleanArgs._connection || null;
+  let conn = cleanArgs._connection || null;
   delete cleanArgs._connection;
+
+  // MCP-19: check the host:port (and the addresses it resolves to) before any
+  // child dials it, and dial the checked address. A refusal never starts a
+  // child and never echoes the connection.
+  if (rule && conn) {
+    try {
+      conn = await guardConnection(rule, conn, tenant, lookup ? { lookup } : {});
+    } catch (err) {
+      if (!(err instanceof EgressError)) throw err;
+      console.error(`[bridge] ${err.message}`);
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
 
   if (useHttpUpstream) {
     const resp = await httpProxy.sendRequest('tools/call', {
@@ -311,6 +331,13 @@ if (isMain && !MCP_COMMAND && !MCP_HTTP_UPSTREAM) {
 if (isMain) server.listen(BRIDGE_PORT, () => {
   console.error(`[bridge] TAS MCP Bridge v2.1 listening on port ${BRIDGE_PORT}`);
   console.error(`[bridge] Server type: ${MCP_SERVER_TYPE || '(none)'}`);
+  if (EGRESS_RULE) {
+    for (const e of EGRESS_RULE.errors) console.error(`[bridge] DSN egress config ignored (fail closed): ${e}`);
+    console.error(`[bridge] DSN egress: enforce (${EGRESS_RULE.platform.length} platform pair(s), ` +
+      `namespaces ${EGRESS_RULE.namespaces.join(',')}, ${Object.keys(EGRESS_RULE.tenants).length} tenant list(s))`);
+  } else {
+    console.error('[bridge] DSN egress: off (BRIDGE_DSN_EGRESS unset)');
+  }
   if (useHttpUpstream) {
     console.error(`[bridge] Mode: HTTP upstream proxy → ${MCP_HTTP_UPSTREAM}`);
   } else {

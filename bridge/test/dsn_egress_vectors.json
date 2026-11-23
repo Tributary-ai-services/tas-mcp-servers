@@ -1,0 +1,1388 @@
+{
+ "about": "MCP-19 DSN egress conformance vectors. The SAME file is in tas-mcp (internal/federation/testdata), aiqg-dashboard-be (internal/mcpconfig/testdata) and tas-mcp-servers (bridge/test). Each repo's test checks this file's sha256, so a change made in one repo fails until it is copied to all three. 'cases': 'allow' is the host:port rule (proxy, AIQG and bridge); 'resolve' + 'dial_allow' is the bridge's dial-time rule over the resolved addresses (DNS rebinding); 'registry': false cases apply only to the proxy with MCP_TENANT_SERVERS off. 'dsn_cases': a stored DSN string for tenant a, checked by AIQG at store time and by the proxy at use time (both formats). 'connection_cases': a _connection object as the bridge receives it (tenant a), with 'resolve' the DNS answer; 'allow' means the bridge dials, and then the child's DATABASE_URL must name exactly the pinned host, the port, the database and at most sslmode.",
+ "config": {
+  "tenants": {
+   "a": "aaaaaaaa-0000-4000-8000-00000000000a",
+   "b": "bbbbbbbb-0000-4000-8000-00000000000b"
+  },
+  "dsn_egress_allow": "postgres-shared.tas-shared.svc.cluster.local:5432",
+  "tenant_egress_allowlist": {
+   "aaaaaaaa-0000-4000-8000-00000000000a": [
+    "pg.vendor.example",
+    "db.partner.example:6543",
+    "*.dbs.example",
+    "10.20.0.5:5432",
+    "203.0.113.7",
+    "127.0.0.1",
+    "169.254.169.254"
+   ]
+  },
+  "cluster_namespaces": []
+ },
+ "cases": [
+  {
+   "name": "platform: shared postgres",
+   "tenant": "a",
+   "host": "postgres-shared.tas-shared.svc.cluster.local",
+   "port": 5432,
+   "allow": true,
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "dial_allow": true
+  },
+  {
+   "name": "platform: short .svc form",
+   "tenant": "a",
+   "host": "postgres-shared.tas-shared.svc",
+   "port": 5432,
+   "allow": true
+  },
+  {
+   "name": "platform: case and trailing dot",
+   "tenant": "a",
+   "host": "Postgres-Shared.TAS-Shared.svc.cluster.local.",
+   "port": 5432,
+   "allow": true
+  },
+  {
+   "name": "platform: any tenant",
+   "tenant": "b",
+   "host": "postgres-shared.tas-shared.svc.cluster.local",
+   "port": 5432,
+   "allow": true
+  },
+  {
+   "name": "platform: wrong port",
+   "tenant": "a",
+   "host": "postgres-shared.tas-shared.svc.cluster.local",
+   "port": 6379,
+   "allow": false
+  },
+  {
+   "name": "platform: resolves to loopback",
+   "tenant": "a",
+   "host": "postgres-shared.tas-shared.svc.cluster.local",
+   "port": 5432,
+   "allow": true,
+   "resolve": [
+    "127.0.0.1"
+   ],
+   "dial_allow": false
+  },
+  {
+   "name": "tas-shared: redis",
+   "tenant": "a",
+   "host": "redis-shared.tas-shared.svc.cluster.local",
+   "port": 6379,
+   "allow": false
+  },
+  {
+   "name": "tas-shared: redis on the postgres port",
+   "tenant": "a",
+   "host": "redis-shared.tas-shared.svc.cluster.local",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "tas-shared: keycloak",
+   "tenant": "a",
+   "host": "keycloak-shared.tas-shared.svc",
+   "port": 8080,
+   "allow": false
+  },
+  {
+   "name": "tas-shared: kafka",
+   "tenant": "b",
+   "host": "kafka-shared.tas-shared.svc.cluster.local",
+   "port": 9092,
+   "allow": false
+  },
+  {
+   "name": "tas-shared: old shared postgres name",
+   "tenant": "a",
+   "host": "tas-postgres-shared.tas-shared.svc",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "namespace: tas-mcp-servers",
+   "tenant": "a",
+   "host": "tenantdb.tas-mcp-servers.svc",
+   "port": 5432,
+   "allow": true,
+   "resolve": [
+    "10.43.1.2"
+   ],
+   "dial_allow": true
+  },
+  {
+   "name": "cluster: pod DNS",
+   "tenant": "a",
+   "host": "10-0-0-5.default.pod.cluster.local",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "cluster: kubernetes api",
+   "tenant": "a",
+   "host": "kubernetes.default.svc",
+   "port": 443,
+   "allow": false
+  },
+  {
+   "name": "bare name",
+   "tenant": "a",
+   "host": "postgres-shared",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "localhost",
+   "tenant": "a",
+   "host": "localhost",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "sub.localhost",
+   "tenant": "a",
+   "host": "db.localhost",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "loopback even when listed",
+   "tenant": "a",
+   "host": "127.0.0.1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "loopback v6",
+   "tenant": "a",
+   "host": "::1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "loopback v4-mapped v6",
+   "tenant": "a",
+   "host": "::ffff:127.0.0.1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "unspecified",
+   "tenant": "a",
+   "host": "0.0.0.0",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "metadata IP even when listed",
+   "tenant": "a",
+   "host": "169.254.169.254",
+   "port": 80,
+   "allow": false
+  },
+  {
+   "name": "metadata IP v6",
+   "tenant": "a",
+   "host": "fd00:ec2::254",
+   "port": 80,
+   "allow": false
+  },
+  {
+   "name": "link-local v4",
+   "tenant": "a",
+   "host": "169.254.1.1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "link-local v6",
+   "tenant": "a",
+   "host": "fe80::1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "metadata name",
+   "tenant": "a",
+   "host": "metadata.google.internal",
+   "port": 80,
+   "allow": false
+  },
+  {
+   "name": "private IP unlisted 10/8",
+   "tenant": "a",
+   "host": "10.0.0.1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "private IP unlisted 192.168/16",
+   "tenant": "a",
+   "host": "192.168.1.10",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "private IP unlisted 172.16/12",
+   "tenant": "a",
+   "host": "172.16.0.1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "CGNAT unlisted",
+   "tenant": "a",
+   "host": "100.64.0.1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "ULA unlisted",
+   "tenant": "a",
+   "host": "fd12::1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "ClusterIP literal of the platform host",
+   "tenant": "a",
+   "host": "10.43.109.5",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "private IP listed with its port: only the platform list opens a private IP",
+   "tenant": "a",
+   "host": "10.20.0.5",
+   "port": 5432,
+   "allow": false,
+   "resolve": [
+    "10.20.0.5"
+   ],
+   "dial_allow": false
+  },
+  {
+   "name": "private IP listed, other port",
+   "tenant": "a",
+   "host": "10.20.0.5",
+   "port": 5433,
+   "allow": false
+  },
+  {
+   "name": "private IP listed, other tenant",
+   "tenant": "b",
+   "host": "10.20.0.5",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "public IP listed",
+   "tenant": "a",
+   "host": "203.0.113.7",
+   "port": 5432,
+   "allow": true
+  },
+  {
+   "name": "public IP unlisted",
+   "tenant": "a",
+   "host": "198.51.100.1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "numeric host: decimal",
+   "tenant": "a",
+   "host": "2130706433",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "numeric host: hex",
+   "tenant": "a",
+   "host": "0x7f.0.0.1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "numeric host: short form",
+   "tenant": "a",
+   "host": "127.1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "numeric host: octal",
+   "tenant": "a",
+   "host": "0177.0.0.1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "external listed",
+   "tenant": "a",
+   "host": "pg.vendor.example",
+   "port": 5432,
+   "allow": true,
+   "resolve": [
+    "198.51.100.20"
+   ],
+   "dial_allow": true
+  },
+  {
+   "name": "rebinding: external resolves to a ClusterIP",
+   "tenant": "a",
+   "host": "pg.vendor.example",
+   "port": 5432,
+   "allow": true,
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "dial_allow": false
+  },
+  {
+   "name": "rebinding: one bad address among good",
+   "tenant": "a",
+   "host": "pg.vendor.example",
+   "port": 5432,
+   "allow": true,
+   "resolve": [
+    "198.51.100.20",
+    "127.0.0.1"
+   ],
+   "dial_allow": false
+  },
+  {
+   "name": "rebinding: metadata",
+   "tenant": "a",
+   "host": "pg.vendor.example",
+   "port": 5432,
+   "allow": true,
+   "resolve": [
+    "169.254.169.254"
+   ],
+   "dial_allow": false
+  },
+  {
+   "name": "rebinding: v4-mapped private",
+   "tenant": "a",
+   "host": "pg.vendor.example",
+   "port": 5432,
+   "allow": true,
+   "resolve": [
+    "::ffff:10.0.0.1"
+   ],
+   "dial_allow": false
+  },
+  {
+   "name": "rebinding: CGNAT",
+   "tenant": "a",
+   "host": "pg.vendor.example",
+   "port": 5432,
+   "allow": true,
+   "resolve": [
+    "100.64.0.9"
+   ],
+   "dial_allow": false
+  },
+  {
+   "name": "rebinding: no address",
+   "tenant": "a",
+   "host": "pg.vendor.example",
+   "port": 5432,
+   "allow": true,
+   "resolve": [],
+   "dial_allow": false
+  },
+  {
+   "name": "external listed with port",
+   "tenant": "a",
+   "host": "db.partner.example",
+   "port": 6543,
+   "allow": true
+  },
+  {
+   "name": "external listed, other port",
+   "tenant": "a",
+   "host": "db.partner.example",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "wildcard subdomain",
+   "tenant": "a",
+   "host": "eu1.dbs.example",
+   "port": 5432,
+   "allow": true
+  },
+  {
+   "name": "wildcard apex",
+   "tenant": "a",
+   "host": "dbs.example",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "listed host, other tenant",
+   "tenant": "b",
+   "host": "pg.vendor.example",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "unlisted external",
+   "tenant": "a",
+   "host": "db.attacker.example",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "suffix trick",
+   "tenant": "a",
+   "host": "pg.vendor.example.attacker.example",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "prefix trick",
+   "tenant": "a",
+   "host": "evilpg.vendor.example",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "port 0",
+   "tenant": "a",
+   "host": "pg.vendor.example",
+   "port": 0,
+   "allow": false
+  },
+  {
+   "name": "port out of range",
+   "tenant": "a",
+   "host": "pg.vendor.example",
+   "port": 70000,
+   "allow": false
+  },
+  {
+   "name": "empty host",
+   "tenant": "a",
+   "host": "",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "registry off: public name",
+   "tenant": "a",
+   "host": "db.example.com",
+   "port": 5432,
+   "registry": false,
+   "allow": true
+  },
+  {
+   "name": "registry off: platform host",
+   "tenant": "a",
+   "host": "postgres-shared.tas-shared.svc.cluster.local",
+   "port": 5432,
+   "registry": false,
+   "allow": true
+  },
+  {
+   "name": "registry off: redis",
+   "tenant": "a",
+   "host": "redis-shared.tas-shared.svc.cluster.local",
+   "port": 6379,
+   "registry": false,
+   "allow": false
+  },
+  {
+   "name": "registry off: IP literal",
+   "tenant": "a",
+   "host": "203.0.113.7",
+   "port": 5432,
+   "registry": false,
+   "allow": false
+  },
+  {
+   "name": "registry off: loopback",
+   "tenant": "a",
+   "host": "127.0.0.1",
+   "port": 5432,
+   "registry": false,
+   "allow": false
+  },
+  {
+   "name": "registry off: numeric host",
+   "tenant": "a",
+   "host": "127.1",
+   "port": 5432,
+   "registry": false,
+   "allow": false
+  },
+  {
+   "name": "syntax: double trailing dot",
+   "tenant": "a",
+   "host": "POSTGRES-SHARED.TAS-SHARED.SVC.CLUSTER.LOCAL..",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "syntax: brackets around a name",
+   "tenant": "a",
+   "host": "[postgres-shared.tas-shared.svc.cluster.local]",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "syntax: nested brackets",
+   "tenant": "a",
+   "host": "[[postgres-shared.tas-shared.svc.cluster.local]]",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "syntax: surrounding spaces",
+   "tenant": "a",
+   "host": " postgres-shared.tas-shared.svc.cluster.local ",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "syntax: trailing tab",
+   "tenant": "a",
+   "host": "postgres-shared.tas-shared.svc.cluster.local\t",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "syntax: comma list",
+   "tenant": "a",
+   "host": "postgres-shared.tas-shared.svc.cluster.local,10.0.0.1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "syntax: comma into an allowed namespace",
+   "tenant": "a",
+   "host": "evilcom,x.tas-mcp-servers.svc",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "syntax: percent-escaped zone",
+   "tenant": "a",
+   "host": "fe80::1%25eth0",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "syntax: IPv6 zone",
+   "tenant": "a",
+   "host": "::1%lo",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "syntax: IPv4 zone",
+   "tenant": "a",
+   "host": "127.0.0.1%eth0",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "syntax: percent-escaped name",
+   "tenant": "a",
+   "host": "%6cocalhost",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "syntax: wildcard as a host",
+   "tenant": "a",
+   "host": "*.dbs.example",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "syntax: host carries a port",
+   "tenant": "a",
+   "host": "eu1.dbs.example:5432",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "syntax: bracketed IPv4",
+   "tenant": "a",
+   "host": "[203.0.113.7]",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "syntax: fullwidth letter",
+   "tenant": "a",
+   "host": "\uff41.dbs.example",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "syntax: NUL byte",
+   "tenant": "a",
+   "host": "pg.vendor.example\u0000.evil",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "syntax: underscore",
+   "tenant": "a",
+   "host": "pg_db.vendor.example",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "not a service name: no .svc",
+   "tenant": "a",
+   "host": "postgres-shared.tas-shared",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "namespace allows any port",
+   "tenant": "a",
+   "host": "x.tas-mcp-servers.svc.cluster.local",
+   "port": 6379,
+   "allow": true
+  },
+  {
+   "name": "IPv4-compatible loopback form",
+   "tenant": "a",
+   "host": "::127.0.0.1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "IPv6 unlisted",
+   "tenant": "a",
+   "host": "::7f00:1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "mapped loopback, long form",
+   "tenant": "a",
+   "host": "0:0:0:0:0:ffff:7f00:1",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "mapped metadata, bracketed",
+   "tenant": "a",
+   "host": "[::ffff:169.254.169.254]",
+   "port": 80,
+   "allow": false
+  },
+  {
+   "name": "NAT64 of the metadata address",
+   "tenant": "a",
+   "host": "64:ff9b::a9fe:a9fe",
+   "port": 80,
+   "allow": false
+  },
+  {
+   "name": "localhost trailing dot",
+   "tenant": "a",
+   "host": "localhost.",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "localhost mixed case",
+   "tenant": "a",
+   "host": "LocalHost",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "localhost.localdomain unlisted",
+   "tenant": "a",
+   "host": "localhost.localdomain",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "numeric: zero-padded quad",
+   "tenant": "a",
+   "host": "127.000.000.001",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "numeric: hex integer",
+   "tenant": "a",
+   "host": "0x7f000001",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "numeric: octal integer",
+   "tenant": "a",
+   "host": "017700000001",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "numeric: exponent-looking bare name",
+   "tenant": "a",
+   "host": "1e100",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "listed, trailing dot",
+   "tenant": "a",
+   "host": "pg.vendor.example.",
+   "port": 5432,
+   "allow": true
+  },
+  {
+   "name": "listed, upper case",
+   "tenant": "a",
+   "host": "PG.VENDOR.EXAMPLE",
+   "port": 5432,
+   "allow": true
+  },
+  {
+   "name": "wildcard, two levels deep",
+   "tenant": "a",
+   "host": "x.y.dbs.example",
+   "port": 5432,
+   "allow": true
+  },
+  {
+   "name": "wildcard apex, trailing dot",
+   "tenant": "a",
+   "host": "dbs.example.",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "numeric: zero-padded private",
+   "tenant": "a",
+   "host": "10.020.0.5",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "mapped listed private IP",
+   "tenant": "a",
+   "host": "::ffff:10.20.0.5",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "mapped listed private IP, hex",
+   "tenant": "a",
+   "host": "::ffff:a14:5",
+   "port": 5432,
+   "allow": false
+  },
+  {
+   "name": "listed public IP without a port, any port",
+   "tenant": "a",
+   "host": "203.0.113.7",
+   "port": 6543,
+   "allow": true
+  },
+  {
+   "name": "mapped listed public IP",
+   "tenant": "a",
+   "host": "::ffff:203.0.113.7",
+   "port": 5432,
+   "allow": true
+  },
+  {
+   "name": "bare: metadata",
+   "tenant": "a",
+   "host": "metadata",
+   "port": 80,
+   "allow": false
+  },
+  {
+   "name": "bare: kubernetes",
+   "tenant": "a",
+   "host": "kubernetes",
+   "port": 443,
+   "allow": false
+  },
+  {
+   "name": "internal suffix",
+   "tenant": "a",
+   "host": "x.internal",
+   "port": 5432,
+   "allow": false
+  }
+ ],
+ "dsn_cases": [
+  {
+   "name": "plain",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db",
+   "allow": true
+  },
+  {
+   "name": "default port",
+   "dsn": "postgresql://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local/org_db",
+   "allow": true
+  },
+  {
+   "name": "sslmode require",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db?sslmode=require",
+   "allow": true
+  },
+  {
+   "name": "sslmode disable",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db?sslmode=disable",
+   "allow": true
+  },
+  {
+   "name": "sslmode prefer",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db?sslmode=prefer",
+   "allow": true
+  },
+  {
+   "name": "password with URL characters",
+   "dsn": "postgres://u:p%40%3A%2F%3F%23x@postgres-shared.tas-shared.svc.cluster.local:5432/org_db",
+   "allow": true
+  },
+  {
+   "name": "query host",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db?host=10.0.0.9",
+   "allow": false
+  },
+  {
+   "name": "query hostaddr",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db?hostaddr=10.0.0.9",
+   "allow": false
+  },
+  {
+   "name": "query port",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db?port=6379",
+   "allow": false
+  },
+  {
+   "name": "sslmode then host",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db?sslmode=disable&host=10.0.0.9",
+   "allow": false
+  },
+  {
+   "name": "unix socket host",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db?host=/var/run/postgresql",
+   "allow": false
+  },
+  {
+   "name": "sslrootcert file",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db?sslmode=verify-full&sslrootcert=/etc/passwd",
+   "allow": false
+  },
+  {
+   "name": "sslkey file",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db?sslkey=/var/run/secrets/kubernetes.io/serviceaccount/token",
+   "allow": false
+  },
+  {
+   "name": "options",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db?options=-c%20search_path%3Dx",
+   "allow": false
+  },
+  {
+   "name": "uselibpqcompat",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db?sslmode=require&uselibpqcompat=true",
+   "allow": false
+  },
+  {
+   "name": "unknown sslmode",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db?sslmode=bogus",
+   "allow": false
+  },
+  {
+   "name": "repeated sslmode",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db?sslmode=require&sslmode=disable",
+   "allow": false
+  },
+  {
+   "name": "semicolon query",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db?sslmode=require;host=x",
+   "allow": false
+  },
+  {
+   "name": "fragment",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db#x",
+   "allow": false
+  },
+  {
+   "name": "database with an encoded query",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/d%3Fhost%3D169.254.169.254",
+   "allow": false
+  },
+  {
+   "name": "database with two segments",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db/x",
+   "allow": false
+  },
+  {
+   "name": "database empty",
+   "dsn": "postgres://u:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/",
+   "allow": false
+  },
+  {
+   "name": "user name with an encoded @",
+   "dsn": "postgres://u%40redis-shared.tas-shared.svc.cluster.local%3A6379:pw@postgres-shared.tas-shared.svc.cluster.local:5432/org_db",
+   "allow": false
+  },
+  {
+   "name": "user name empty",
+   "dsn": "postgres://:pw-12345678@postgres-shared.tas-shared.svc.cluster.local:5432/org_db",
+   "allow": false
+  },
+  {
+   "name": "no user info",
+   "dsn": "postgres://postgres-shared.tas-shared.svc.cluster.local:5432/org_db",
+   "allow": false
+  },
+  {
+   "name": "redis host",
+   "dsn": "postgres://u:pw@redis-shared.tas-shared.svc.cluster.local:6379/org_db",
+   "allow": false
+  },
+  {
+   "name": "other port",
+   "dsn": "postgres://u:pw@postgres-shared.tas-shared.svc.cluster.local:5433/org_db",
+   "allow": false
+  }
+ ],
+ "connection_cases": [
+  {
+   "name": "plain",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": true
+  },
+  {
+   "name": "ssl_mode require keeps the name",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db",
+    "ssl_mode": "require"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": true
+  },
+  {
+   "name": "ssl_mode prefer keeps the name",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db",
+    "ssl_mode": "prefer"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": true
+  },
+  {
+   "name": "ssl_mode allow keeps the name",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db",
+    "ssl_mode": "allow"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": true
+  },
+  {
+   "name": "ssl_mode disable",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db",
+    "ssl_mode": "disable"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": true
+  },
+  {
+   "name": "ssl_mode empty",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db",
+    "ssl_mode": ""
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": true
+  },
+  {
+   "name": "protocol postgresql",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db",
+    "protocol": "postgresql"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": true
+  },
+  {
+   "name": "password with URL characters",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "p@ss:/?#[]%&=",
+    "database": "org_db"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": true
+  },
+  {
+   "name": "username redirects the authority",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u:x@redis-shared.tas-shared.svc.cluster.local:6379/d#",
+    "password": "pw-12345678",
+    "database": "org_db"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "database query host",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "d?host=169.254.169.254"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "database query host and port",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "d?host=keycloak.tas-shared.svc.cluster.local&port=8080"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "ssl_mode appends host and port",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db",
+    "ssl_mode": "disable&host=10.0.0.9&port=6379"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "database unix socket",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "d?host=/var/run/postgresql"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "database path",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "d/x"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "ssl_mode unknown",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db",
+    "ssl_mode": "bogus"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "port as a string",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": "5432",
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "port fractional",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432.5,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "port zero",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 0,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "username empty",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "",
+    "password": "pw-12345678",
+    "database": "org_db"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "database empty",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": ""
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "username missing",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "password": "pw-12345678",
+    "database": "org_db"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "password not a string",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": 12345,
+    "database": "org_db"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "host not a string",
+   "connection": {
+    "host": [
+     "a"
+    ],
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "extra field sslrootcert",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db",
+    "sslrootcert": "/etc/passwd"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "extra field sslkey",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db",
+    "sslkey": "/var/run/secrets/kubernetes.io/serviceaccount/token"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "extra field options",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db",
+    "options": "-c search_path=x"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "extra field hostaddr",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db",
+    "hostaddr": "10.0.0.9"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "protocol with a space",
+   "connection": {
+    "host": "postgres-shared.tas-shared.svc.cluster.local",
+    "port": 5432,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db",
+    "protocol": "postgres x"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  },
+  {
+   "name": "redis host",
+   "connection": {
+    "host": "redis-shared.tas-shared.svc.cluster.local",
+    "port": 6379,
+    "username": "u",
+    "password": "pw-12345678",
+    "database": "org_db"
+   },
+   "resolve": [
+    "10.43.109.5"
+   ],
+   "allow": false
+  }
+ ]
+}
