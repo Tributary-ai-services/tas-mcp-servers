@@ -1,0 +1,50 @@
+# The Database CR dbhub's DSN is built from (SEC-39, 2026-11-22). It was never
+# in git before; this is the live object's spec.
+#
+# credentialsRef points at tas-mcp-servers/dbhub-pg-ro, the login of role
+# dbhub_ro: not a superuser, no table grants in any database, read-only
+# transactions, 15 s statement timeout. Until 2026-11-22 it pointed at
+# tas-shared/postgres-shared-secret, i.e. tasuser (superuser), so any anonymous
+# execute_sql through the proxy could read pg_authid. Never point it back.
+#
+# The Secret is created out of band and is not in git (password in
+# aether-secrets/apps/tas-mcp/dbhub-readonly.env). The role's DDL:
+#   CREATE ROLE dbhub_ro LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT
+#     NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 20 PASSWORD '<scram verifier>';
+#   ALTER ROLE dbhub_ro SET default_transaction_read_only = on;
+#   ALTER ROLE dbhub_ro SET statement_timeout = '15s';
+#   ALTER ROLE dbhub_ro SET temp_file_limit = '256MB';
+#   GRANT CONNECT ON DATABASE tas_shared TO dbhub_ro;
+# Grant table access only for a named need, e.g. the agent catalogue:
+#   GRANT USAGE ON SCHEMA agent_builder TO dbhub_ro;
+#   GRANT SELECT ON agent_builder.agents, agent_builder.skills TO dbhub_ro;
+# and keep the *_executions tables out (prompts and outputs).
+#
+# The operator (v0.1.4+) hashes the referenced credentials onto the pod
+# template (creds-hash), so changing this CR rolls dbhub on its own; a change
+# to the Secret's contents alone is picked up on the 5-minute requeue.
+apiVersion: dbhub.tas.io/v1alpha1
+kind: Database
+metadata:
+  name: tas-postgres
+  namespace: tas-mcp-servers
+  labels:
+    environment: production
+    team: platform
+spec:
+  connectionTimeout: 30
+  credentialsRef:
+    name: dbhub-pg-ro
+    namespace: tas-mcp-servers
+    passwordKey: password
+    userKey: username
+  database: tas_shared
+  description: TAS shared PostgreSQL database for platform services
+  host: postgres-shared.tas-shared.svc.cluster.local
+  maxRows: 1000
+  port: 5432
+  queryTimeout: 15
+  readOnly: true
+  sslMode: disable
+  type: postgres
+
