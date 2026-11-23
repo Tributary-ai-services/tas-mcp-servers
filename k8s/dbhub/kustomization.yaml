@@ -24,25 +24,16 @@ namespace: tas-mcp-servers
 #                 next reconcile. dbhub crash-looped for 227 days on a bad
 #                 [[sources]] array once already (MCP-7).
 resources:
+  - database.yaml
   - dbhubinstance.yaml
   - service.yaml
   - ingress.yaml
 
-# Secret 'dbhub-secrets' must be created externally with DSN environment variables.
-# These are referenced in configmap.yaml's dbhub.toml as ${VAR_NAME}
-#
-# Example - create secret with database DSNs:
-#
-# kubectl create secret generic dbhub-secrets \
-#   --namespace=tas-mcp-servers \
-#   --from-literal=TAS_POSTGRES_DSN="postgres://tasuser:taspassword@tas-postgres-shared.tas-shared.svc.cluster.local:5432/tas_shared?sslmode=disable" \
-#   --from-literal=TAS_MYSQL_DSN="mysql://user:pass@mysql-host:3306/db" \
-#   --from-literal=ANALYTICS_DSN="postgres://readonly:pass@analytics:5432/warehouse"
-#
-# Then update configmap.yaml to add corresponding [[sources]] entries.
-#
-# Users select database by source ID when calling MCP tools:
-#   execute_sql(source="tas_postgres", query="SELECT ...")
+# Credentials: database.yaml's credentialsRef names the Secret dbhub-pg-ro
+# (role dbhub_ro, created out of band). The operator renders the DSN into the
+# Secret dbhub-creds itself. Do NOT create a DSN Secret with the tasuser login:
+# tasuser is a superuser (SEC-39). Users select a database by source id:
+#   execute_sql(source="tas-postgres", sql="SELECT ...")
 
 # `labels:` with includeSelectors:false, NOT commonLabels (OPS-28) — this is
 # what made the Service hazard above possible: commonLabels injects these into
