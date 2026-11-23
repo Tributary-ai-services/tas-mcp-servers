@@ -37,7 +37,7 @@ spec:
                     values: ["compute"]
       containers:
         - name: postgres-mcp
-          image: registry-api.tas.scharber.com/tas-mcp-bridge:1.2.0@sha256:c32160deca2231cfb2f267248e122fde49826340929f168877680954b76ae580
+          image: registry-api.tas.scharber.com/tas-mcp-bridge:1.3.0@sha256:0a21f9e34b50a3d262e7da6d2dd4ecc35bd4578f5a81132d5e5eaa20d1a79229
           imagePullPolicy: Always
           ports:
             - name: http
@@ -61,7 +61,7 @@ spec:
             - name: BRIDGE_NAME
               value: "postgres-mcp"
             - name: BRIDGE_VERSION
-              value: "1.1.0"
+              value: "1.3.0"
             # MCP-19: validate every _connection field and check its host:port,
             # and the addresses it resolves to, before a child dials it; dial
             # the checked address (DNS rebinding). Read by the first bridge
