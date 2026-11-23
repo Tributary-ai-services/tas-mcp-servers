@@ -9,10 +9,11 @@ import {
   canonicalHost, checkHost, checkAddresses, guardConnection, loadEgressRule, parseDSNEgressAllow, EgressError,
 } from '../src/egress.js';
 import { handleCallTool } from '../src/server.js';
+import { connectionToEnv, postgresURL } from '../src/pool.js';
 
 // Same file, same hash, as tas-mcp internal/federation/testdata and
 // aiqg-dashboard-be internal/mcpconfig/testdata. Change all three together.
-const VECTORS_SHA256 = '2a2c2469c79b6d36a82fa85836921e1206f7788066bb82709ff9f08c15f4f778';
+const VECTORS_SHA256 = '05b7ea3cc0d6cfc2fa5abedb7b86c5a095ced6840f82fbe43c7bf1508868ec16';
 const raw = readFileSync(new URL('./dsn_egress_vectors.json', import.meta.url));
 const V = JSON.parse(raw);
 
@@ -76,13 +77,15 @@ test('the checked address is the one dialed (pinned), unless TLS verifies the na
   assert.equal(calls, 1);
   const v6 = await guardConnection(rule, { ...base, host: 'pg.vendor.example' }, tenant,
     { lookup: fakeLookup(['2001:db8::20']) });
-  assert.equal(v6.host, '[2001:db8::20]');
-  for (const ssl of ['require', 'verify-ca', 'verify-full']) {
+  assert.equal(v6.host, '2001:db8::20');
+  assert.equal(new URL(postgresURL(v6)).hostname, '[2001:db8::20]');
+  // node-postgres verifies the certificate for every TLS mode but no-verify
+  // (allow and prefer included), so those keep the name (LOW-B).
+  for (const ssl of ['allow', 'prefer', 'require', 'verify-ca', 'verify-full']) {
     const kept = await guardConnection(rule, { ...base, ssl_mode: ssl }, tenant, { lookup });
     assert.equal(kept.host, base.host, ssl);
   }
-  // disable / prefer / no-verify: pinned (prefer may fall back to plaintext).
-  for (const ssl of ['disable', 'prefer', 'no-verify', '']) {
+  for (const ssl of ['disable', 'no-verify', '']) {
     const p = await guardConnection(rule, { ...base, ssl_mode: ssl }, tenant, { lookup });
     assert.equal(p.host, '10.43.109.5', ssl);
   }
@@ -137,4 +140,65 @@ test('dial rule refuses 0.0.0.0/8 and private addresses for tenant hosts only', 
   assert.notEqual(checkAddresses('tenant', ['fd12::5']), '');
   assert.notEqual(checkAddresses('tenant', ['172.20.0.1']), '');
   assert.equal(checkAddresses('tenant', ['8.8.8.8', '2001:4860::8888']), '');
+});
+
+// The re-review's HIGH: every field of a _connection, not only host and port.
+// Each allowed case must yield a DATABASE_URL that names exactly the checked
+// host, the port and the database, with no query but sslmode.
+test('field injection: shared connection vectors', async () => {
+  const rule = ruleFromVectors();
+  assert.ok(V.connection_cases.length >= 25);
+  for (const c of V.connection_cases) {
+    let dialed = null;
+    try {
+      dialed = await guardConnection(rule, c.connection, V.config.tenants.a, { lookup: fakeLookup(c.resolve) });
+    } catch (e) {
+      assert.ok(e instanceof EgressError, `${c.name}: ${e}`);
+      assert.ok(!e.message.includes('pw-12345678'), `${c.name}: refusal quotes the password`);
+    }
+    assert.equal(dialed !== null, c.allow, `${c.name}: allowed=${dialed !== null}`);
+    if (!dialed) continue;
+    const u = new URL(connectionToEnv(dialed, 'postgres').DATABASE_URL);
+    const verifying = ['allow', 'prefer', 'require', 'verify-ca', 'verify-full'].includes(c.connection.ssl_mode);
+    assert.equal(u.hostname, verifying ? c.connection.host : c.resolve[0], `${c.name}: host`);
+    assert.equal(u.port, String(c.connection.port), `${c.name}: port`);
+    assert.equal(decodeURIComponent(u.pathname), `/${c.connection.database}`, `${c.name}: database`);
+    assert.equal(decodeURIComponent(u.username), c.connection.username, `${c.name}: username`);
+    assert.equal(decodeURIComponent(u.password), c.connection.password, `${c.name}: password round trip`);
+    assert.deepEqual([...u.searchParams.keys()].filter((k) => k !== 'sslmode'), [], `${c.name}: query`);
+    assert.equal(u.hash, '', `${c.name}: fragment`);
+  }
+});
+
+test('postgresURL refuses a host or port the URL setters would silently drop', () => {
+  for (const host of ['a.b/c', 'a.b?x', 'a.b#x', 'u@a.b', 'a b', '']) {
+    assert.throws(() => postgresURL({ host, port: 5432, username: 'u', password: 'p', database: 'd' }), undefined, host);
+  }
+  for (const port of ['5432x', 0, 70000, 5432.5]) {
+    assert.throws(() => postgresURL({ host: 'a.b', port, username: 'u', password: 'p', database: 'd' }), undefined, String(port));
+  }
+});
+
+test('a non-object _connection is refused, not passed to the pool', async () => {
+  const rule = ruleFromVectors();
+  for (const conn of ['postgres://x', 7, [], true]) {
+    await assert.rejects(guardConnection(rule, conn, V.config.tenants.a, { lookup: fakeLookup(['10.43.109.5']) }), EgressError);
+  }
+  assert.equal(await guardConnection(rule, null, ''), null, 'the default login still passes');
+});
+
+// Second line, and the only one with enforcement off: connectionToEnv encodes
+// every part, so a field cannot rewrite the host, port, database or query.
+test('connectionToEnv: no field spills into another URL part', () => {
+  const env = connectionToEnv({ host: 'postgres-shared.tas-shared.svc.cluster.local', port: 5432,
+    username: 'u:x@redis-shared.tas-shared.svc.cluster.local:6379/d#', password: 'p?host=10.0.0.9',
+    database: 'd?host=169.254.169.254&port=80', ssl_mode: 'disable&host=10.0.0.9' }, 'postgres');
+  const u = new URL(env.DATABASE_URL);
+  assert.equal(u.hostname, 'postgres-shared.tas-shared.svc.cluster.local');
+  assert.equal(u.port, '5432');
+  assert.equal(decodeURIComponent(u.pathname), '/d?host=169.254.169.254&port=80');
+  assert.deepEqual([...u.searchParams.keys()], ['sslmode']);
+  assert.equal(u.searchParams.get('sslmode'), 'disable&host=10.0.0.9');
+  assert.equal(decodeURIComponent(u.username), 'u:x@redis-shared.tas-shared.svc.cluster.local:6379/d#');
+  assert.equal(u.hash, '');
 });

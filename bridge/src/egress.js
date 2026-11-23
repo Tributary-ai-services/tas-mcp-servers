@@ -12,7 +12,13 @@
  * that changes between the check and the dial (rebinding) cannot reach the
  * cluster.
  *
+ * Every field of the _connection is validated first (`checkFields`): only
+ * host, port, username, password, database, protocol and ssl_mode; username
+ * and database of [A-Za-z0-9._-]; port an integer; ssl_mode from a fixed set.
+ * A user name or database could otherwise rewrite the URL the child dials.
+ *
  * The host:port rule (`checkHost`), in order:
+ *   0. The host must be plain (`hostSyntaxOK`).
  *   1. Always refused, even when listed: localhost names, loopback, link-local
  *      (169.254.169.254 included), fd00:ec2::254, unspecified and multicast
  *      addresses, and non-standard numeric hosts ("2130706433", "127.1").
@@ -20,7 +26,8 @@
  *   3. Allowed: a service in MCP_TENANT_CLUSTER_NAMESPACES (default
  *      tas-mcp-servers; kind "cluster"). Other cluster names, bare names: no.
  *   4. An IP literal passes only when the tenant's MCP_TENANT_EGRESS_ALLOWLIST
- *      lists it (kind "tenant").
+ *      lists it and it is public (kind "tenant"); a private one only through
+ *      MCP_DSN_EGRESS_ALLOW.
  *   5. Allowed: a name on the tenant's allowlist; "host:port" matches that
  *      port only (kind "tenant").
  *
@@ -136,6 +143,8 @@ const ALWAYS_DENIED = [
 const PRIVATE = [
   pfx('10.0.0.0', 8), pfx('172.16.0.0', 12), pfx('192.168.0.0', 16),
   pfx('100.64.0.0', 10), pfx('fc00::', 7),
+  // NAT64: a NAT64 gateway turns 64:ff9b::a9fe:a9fe into 169.254.169.254.
+  pfx('64:ff9b::', 96), pfx('64:ff9b:1::', 48),
 ];
 // Dial time only: 0.0.0.0/8 is "this network" and dials local addresses.
 const DIAL_DENIED = [...ALWAYS_DENIED, pfx('0.0.0.0', 8)];
@@ -197,6 +206,23 @@ function isClusterInternal(host) {
 
 const validPort = (p) => Number.isInteger(p) && p > 0 && p <= 65535;
 
+// An LDH host name (the proxy's dnsNameRe).
+const DNS_NAME_RE = /^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.?$/;
+
+/**
+ * hostSyntaxOK is rule 0: only an LDH name, an IP literal with no zone, or one
+ * pair of brackets around an IPv6 literal. The same as the proxy and AIQG.
+ */
+export function hostSyntaxOK(raw) {
+  if (typeof raw !== 'string' || raw === '' || raw.length > 255 || raw.includes('%')) return false;
+  if (raw.startsWith('[')) {
+    if (!raw.endsWith(']')) return false;
+    return net.isIP(raw.slice(1, -1)) === 6;
+  }
+  if (net.isIP(raw) !== 0) return true;
+  return DNS_NAME_RE.test(raw);
+}
+
 /** splitHostPort reads "host:port" / "[v6]:port"; null when there is no port. */
 function splitHostPort(s) {
   const m = /^\[([^\]]+)\]:([^:]+)$/.exec(s) || /^([^:[\]]+):([^:]+)$/.exec(s);
@@ -224,7 +250,8 @@ export function parseDSNEgressAllow(raw) {
     item = item.trim();
     if (!item) continue;
     const hp = splitHostPort(item);
-    if (!hp) throw new Error(`MCP_DSN_EGRESS_ALLOW: ${JSON.stringify(item)} is not host:port`);
+    if (hp && item.startsWith('[')) hp.host = `[${hp.host}]`; // keep brackets for the IPv6-only check
+    if (!hp || !hostSyntaxOK(hp.host)) throw new Error(`MCP_DSN_EGRESS_ALLOW: ${JSON.stringify(item)} is not host:port`);
     if (!validPort(hp.port)) throw new Error(`MCP_DSN_EGRESS_ALLOW: ${JSON.stringify(item)} has no valid port`);
     const host = canonicalHost(hp.host);
     if (!host || host.startsWith('*')) throw new Error(`MCP_DSN_EGRESS_ALLOW: ${JSON.stringify(item)} must name one host`);
@@ -271,8 +298,9 @@ export function loadEgressRule(env = process.env) {
  * { ok: false, reason }. The reason names the host, never a credential.
  */
 export function checkHost(rule, tenant, rawHost, port) {
-  const host = canonicalHost(rawHost);
   const no = (reason) => ({ ok: false, reason });
+  if (!hostSyntaxOK(rawHost)) return no(`${JSON.stringify(String(rawHost))} is not a plain host name or IP address`);
+  const host = canonicalHost(rawHost);
   if (!host) return no('no host');
   if (!validPort(port)) return no(`port ${port} is not a valid port`);
   const why = alwaysDenied(host);
@@ -284,8 +312,12 @@ export function checkHost(rule, tenant, rawHost, port) {
     return no(`${host}:${port} is not on MCP_DSN_EGRESS_ALLOW and namespace ${ns} is not allowed`);
   }
   if (isClusterInternal(host)) return no(`${host} is cluster-internal`);
-  const ip = parseAddr(host) !== null;
+  const addr = parseAddr(host);
+  const ip = addr !== null;
   if (!host.includes('.') && !ip) return no(`${host} is a bare name`);
+  // A private IP literal is opened only by MCP_DSN_EGRESS_ALLOW (above), the
+  // same at store time, use time and dial time.
+  if (ip && isPrivateAddr(addr)) return no(`${host} is a private address; only MCP_DSN_EGRESS_ALLOW can open one`);
   const allow = (tenant && Array.isArray(rule.tenants[tenant])) ? rule.tenants[tenant] : [];
   for (const raw of allow) {
     const e = splitAllowEntry(raw);
@@ -316,23 +348,70 @@ export function checkAddresses(kind, addresses) {
   return '';
 }
 
-// sslmode values under which the client verifies the server certificate
-// against the host name (node-postgres treats require and verify-ca as
-// verify-full). With these the name is kept: TLS identity refuses a rebound
-// target, and pinning to an address would fail the certificate check.
-const VERIFYING_SSL = new Set(['require', 'verify-ca', 'verify-full']);
+// The ssl_mode values a connection may carry (the proxy's DSNSSLModes), and
+// what node-postgres (pg-connection-string 2.x, pinned in the postgres-mcp
+// manifest) does with each:
+//   - '' / absent: no TLS              -> pinned to the checked address
+//   - disable: no TLS                  -> pinned
+//   - no-verify: TLS, no verification  -> pinned
+//   - allow, prefer, require, verify-ca, verify-full: TLS verified against
+//     the host name (pg treats every one of them as verify-full)
+//                                      -> the name is kept: pinning would fail
+//     the certificate check, and TLS identity refuses a rebound target.
+const SSL_MODES = new Set(['', 'disable', 'no-verify', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full']);
+const VERIFYING_SSL = new Set(['allow', 'prefer', 'require', 'verify-ca', 'verify-full']);
+
+// The only fields a _connection may carry. Anything else (sslrootcert,
+// sslkey, options, hostaddr...) is refused rather than ignored, so a future
+// connectionToEnv cannot start honouring one by accident.
+const CONNECTION_FIELDS = new Set(['host', 'port', 'username', 'password', 'database', 'protocol', 'ssl_mode']);
+// User names and databases are put into a URL: nothing that could start a new
+// URL part (@ : / ? # & =) or a parameter.
+const IDENT_RE = /^[A-Za-z0-9._-]+$/;
+const PROTOCOL_RE = /^[a-z][a-z0-9+]{0,15}$/;
+const MAX_PASSWORD = 1024;
 
 /** EgressError is a refusal; its message is safe to return to the caller. */
 export class EgressError extends Error {}
 
 /**
+ * checkFields validates every field of a _connection (the re-review's HIGH:
+ * the host and port were checked while the user name, database or ssl_mode
+ * could rewrite the URL the child dials). Returns '' or the reason, which
+ * never quotes a value.
+ */
+export function checkFields(conn) {
+  if (!conn || typeof conn !== 'object' || Array.isArray(conn)) return '_connection must be an object';
+  for (const k of Object.keys(conn)) {
+    if (!CONNECTION_FIELDS.has(k)) return `_connection field ${JSON.stringify(k).slice(0, 40)} is not allowed`;
+  }
+  if (typeof conn.host !== 'string') return 'host must be a string';
+  if (typeof conn.port !== 'number' || !validPort(conn.port)) return 'port must be an integer from 1 to 65535';
+  if (typeof conn.username !== 'string' || !IDENT_RE.test(conn.username)) return "username must be letters, digits, '.', '_' or '-'";
+  if (typeof conn.database !== 'string' || !IDENT_RE.test(conn.database)) return "database must be letters, digits, '.', '_' or '-'";
+  if (conn.password !== undefined && (typeof conn.password !== 'string' || conn.password.length > MAX_PASSWORD)) {
+    return 'password must be a string';
+  }
+  if (conn.protocol !== undefined && (typeof conn.protocol !== 'string' || !PROTOCOL_RE.test(conn.protocol))) {
+    return 'protocol is not a protocol name';
+  }
+  if (conn.ssl_mode !== undefined && (typeof conn.ssl_mode !== 'string' || !SSL_MODES.has(conn.ssl_mode))) {
+    return 'ssl_mode must be one of disable, no-verify, allow, prefer, require, verify-ca, verify-full';
+  }
+  return '';
+}
+
+/**
  * guardConnection checks a `_connection` and returns the connection to dial:
- * a copy whose host is the checked address (pinned), or the original when
- * TLS verification protects the name. Throws EgressError when refused.
+ * a copy whose host is the checked address (pinned), or a copy with the name
+ * when TLS verification protects it. Throws EgressError when refused. A null
+ * or undefined connection (the bridge's own default login) passes through.
  */
 export async function guardConnection(rule, conn, tenant, { lookup = dns.lookup } = {}) {
-  if (!conn || typeof conn !== 'object') return conn;
-  const port = Number(conn.port);
+  if (conn === null || conn === undefined) return conn;
+  const badField = checkFields(conn);
+  if (badField) throw new EgressError(`connection refused by egress policy: ${badField}`);
+  const port = conn.port;
   const verdict = checkHost(rule, tenant, conn.host, port);
   if (!verdict.ok) throw new EgressError(`connection refused by egress policy: ${verdict.reason}`);
   let addresses;
@@ -348,8 +427,7 @@ export async function guardConnection(rule, conn, tenant, { lookup = dns.lookup 
   }
   const bad = checkAddresses(verdict.kind, addresses);
   if (bad) throw new EgressError(`connection refused by egress policy: ${bad}`);
-  if (VERIFYING_SSL.has(String(conn.ssl_mode || '').toLowerCase())) return conn;
+  if (VERIFYING_SSL.has(conn.ssl_mode || '')) return { ...conn, host: verdict.host };
   const a = parseAddr(addresses[0]);
-  const pinned = a.v === 6 ? `[${formatAddr(a)}]` : formatAddr(a);
-  return { ...conn, host: pinned };
+  return { ...conn, host: formatAddr(a) };
 }

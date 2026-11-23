@@ -46,8 +46,14 @@ spec:
           env:
             - name: MCP_COMMAND
               value: "sh -c"
+            # MCP-19 re-review (LOW-B): versions pinned, because the bridge's
+            # pin-or-keep-the-name rule for sslmode depends on node-postgres
+            # semantics (pg-connection-string 2.x verifies the certificate for
+            # allow/prefer/require/verify-ca/verify-full). These are the
+            # versions that ran unpinned on 2026-11-23. "$DATABASE_URL" is
+            # quoted so sh does not word-split or glob it.
             - name: MCP_ARGS
-              value: '["npx -y @modelcontextprotocol/server-postgres $DATABASE_URL"]'
+              value: '["npx -y -p pg@8.23.1 -p pg-connection-string@2.14.1 -p @modelcontextprotocol/server-postgres@0.6.2 mcp-server-postgres \"$DATABASE_URL\""]'
             - name: MCP_SERVER_TYPE
               value: "postgres"
             - name: BRIDGE_PORT
@@ -56,11 +62,11 @@ spec:
               value: "postgres-mcp"
             - name: BRIDGE_VERSION
               value: "1.1.0"
-            # MCP-19: check every _connection's host:port, and the addresses it
-            # resolves to, before a child dials it; dial the checked address
-            # (DNS rebinding). Read by the first bridge image with
-            # src/egress.js; the 1.2.0 image above ignores both. The value must
-            # equal MCP_DSN_EGRESS_ALLOW on the tas-mcp proxy and
+            # MCP-19: validate every _connection field and check its host:port,
+            # and the addresses it resolves to, before a child dials it; dial
+            # the checked address (DNS rebinding). Read by the first bridge
+            # image with src/egress.js; the 1.2.0 image above ignores both. The
+            # value must equal MCP_DSN_EGRESS_ALLOW on the tas-mcp proxy and
             # aiqg-dashboard-be. Opens the shared PostgreSQL only: Redis,
             # Keycloak, Kafka and MinIO in tas-shared stay refused. No
             # MCP_TENANT_EGRESS_ALLOWLIST (no external hosts), as on the proxy.
