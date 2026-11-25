@@ -1,3 +1,9 @@
+# WARNING (MCP-17, 2026-11-25): illustrative samples only. Do NOT apply this
+# file (and do not run `make samples`) against production: it would create a
+# `git-mcp` server that does not exist and rewrite the live `postgres-mcp` CR
+# (auth none -> api_key with a Secret that does not exist, endpoint removed),
+# breaking postgres-mcp federation. The production CRs are in
+# federated-servers-prod.yaml, which `kubectl diff -f` shows matches live.
 apiVersion: mcp.tas.ai/v1
 kind: FederatedMCPServer
 metadata:

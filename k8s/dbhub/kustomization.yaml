@@ -37,6 +37,6 @@ resources:
 
 # No `labels:` transformer (MCP-17). It stamped project/tier/service onto
 # the DBHubInstance, the Database and the Service, none of which carry them
-# live (the operator owns the Service's metadata). Each manifest states its
+# live (dbhub-operator manages the Service's app.kubernetes.io/* labels). Each manifest states its
 # live labels; the Ingress keeps `tier: shared-infrastructure` as it is live
 # (OPS-30 tracks that mismatch with the parent's `tier: mcp-servers`).
