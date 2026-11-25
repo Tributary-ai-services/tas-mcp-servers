@@ -10,10 +10,13 @@ resources:
   - deployment.yaml
   - service.yaml
   - configmap.yaml
-  - secret.yaml
   - ingress.yaml
 
-commonLabels:
-  project: tas
-  tier: mcp-servers
-  service: napkin-mcp
+# No commonLabels: it also stamped project/tier/service onto the ConfigMap,
+# which live does not carry, so each manifest now states its live labels and
+# selectors explicitly (MCP-17).
+#
+# secret.yaml is NOT rendered. napkin-mcp-secret holds live credentials and is
+# managed out of band; `kubectl apply` deletes keys a manifest omits, and the
+# live last-applied-configuration lists every key, so an empty Secret here
+# would wipe them. See secret.yaml for the key names.

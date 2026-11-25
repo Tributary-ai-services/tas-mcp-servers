@@ -6,6 +6,9 @@ metadata:
   labels:
     app: paper-search-mcp
     component: mcp-server
+    project: tas
+    service: paper-search-mcp
+    tier: mcp-servers
 spec:
   type: ClusterIP
   ports:

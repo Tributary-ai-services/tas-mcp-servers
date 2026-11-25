@@ -6,6 +6,9 @@ metadata:
   labels:
     app: kafka-mcp
     component: mcp-server
+    project: tas
+    service: kafka-mcp
+    tier: mcp-servers
 spec:
   type: ClusterIP
   ports:

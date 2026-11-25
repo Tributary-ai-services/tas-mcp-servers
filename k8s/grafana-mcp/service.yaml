@@ -6,6 +6,9 @@ metadata:
   labels:
     app: grafana-mcp
     component: mcp-server
+    project: tas
+    service: grafana-mcp
+    tier: mcp-servers
 spec:
   type: ClusterIP
   ports:

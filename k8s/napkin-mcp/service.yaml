@@ -6,6 +6,9 @@ metadata:
   labels:
     app: napkin-mcp
     component: mcp-server
+    project: tas
+    service: napkin-mcp
+    tier: mcp-servers
 spec:
   type: ClusterIP
   ports:
@@ -15,3 +18,7 @@ spec:
     name: http
   selector:
     app: napkin-mcp
+
+    project: tas
+    service: napkin-mcp
+    tier: mcp-servers

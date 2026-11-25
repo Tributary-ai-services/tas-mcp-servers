@@ -6,6 +6,9 @@ metadata:
   labels:
     app: sequential-thinking-mcp
     component: mcp-server
+    project: tas
+    service: sequential-thinking-mcp
+    tier: mcp-servers
 spec:
   type: ClusterIP
   ports:

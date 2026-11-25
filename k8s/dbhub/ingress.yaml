@@ -3,6 +3,10 @@ kind: Ingress
 metadata:
   name: dbhub-ingress
   namespace: tas-mcp-servers
+  labels:
+    project: tas
+    service: dbhub
+    tier: shared-infrastructure
   annotations:
     cert-manager.io/cluster-issuer: "tas-ca-issuer"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"

@@ -20,9 +20,16 @@ k8s/
 
 ### Deploy All MCP Servers
 
+This tree matches production (MCP-17): `kubectl diff -k k8s/` exits 0. Diff
+first, and read every line of the diff before applying.
+
 ```bash
+kubectl diff -k k8s/
 kubectl apply -k k8s/
 ```
+
+Secrets are not rendered by any kustomization here; each `secret.yaml` is
+comment-only and says how its Secret is created out of band.
 
 ### Deploy Individual Server
 
@@ -38,7 +45,7 @@ Web scraping service using headless browsers for intelligent content extraction.
 
 | Property | Value |
 |----------|-------|
-| Image | `unclecode/crawl4ai:latest` |
+| Image | `unclecode/crawl4ai:0.9.5` |
 | Port | 11235 |
 | Namespace | `tas-mcp-servers` |
 | Internal URL | `http://crawl4ai.tas-mcp-servers.svc.cluster.local:11235` |
@@ -68,8 +75,8 @@ Web scraping service using headless browsers for intelligent content extraction.
 
 ## Integration with TAS Infrastructure
 
-These servers are deployed to the `tas-shared` namespace and integrate with:
+These servers are deployed to the `tas-mcp-servers` namespace and integrate with:
 - **TAS MCP Federation** - Unified access to MCP capabilities
-- **cert-manager** - Automatic TLS certificates via Let's Encrypt
+- **cert-manager** - Automatic TLS certificates from the internal `tas-ca-issuer` CA
 - **NGINX Ingress** - External access with SSL termination
 - **Prometheus** - Metrics collection (if exposed)

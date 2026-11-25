@@ -6,6 +6,9 @@ metadata:
   labels:
     app: context7-mcp
     component: mcp-server
+    project: tas
+    service: context7-mcp
+    tier: mcp-servers
 spec:
   type: ClusterIP
   ports:

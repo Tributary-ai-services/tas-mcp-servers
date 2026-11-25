@@ -6,6 +6,9 @@ metadata:
   labels:
     app: kafka-mcp
     component: mcp-server
+    project: tas
+    service: kafka-mcp
+    tier: mcp-servers
 spec:
   replicas: 1
   selector:
@@ -73,6 +76,9 @@ spec:
           name: http
           protocol: TCP
         env:
+        # Present with no value on the live pod: the bridge proxies MCP_HTTP_UPSTREAM
+        # rather than spawning a command. Kept so an apply does not remove it.
+        - name: MCP_COMMAND
         - name: MCP_ARGS
           value: "[]"
         - name: BRIDGE_PORT

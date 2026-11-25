@@ -6,6 +6,9 @@ metadata:
   labels:
     app: neo4j-mcp
     component: mcp-server
+    project: tas
+    service: neo4j-mcp
+    tier: mcp-servers
 spec:
   type: ClusterIP
   ports:

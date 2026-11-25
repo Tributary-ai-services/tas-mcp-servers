@@ -6,6 +6,9 @@ metadata:
   labels:
     app: neo4j-mcp
     component: mcp-server
+    project: tas
+    service: neo4j-mcp
+    tier: mcp-servers
 spec:
   replicas: 1
   selector:
@@ -58,7 +61,7 @@ spec:
         - name: BRIDGE_NAME
           value: neo4j-mcp
         - name: BRIDGE_VERSION
-          value: "1.1.0"
+          value: "1.0.0"
         envFrom:
         - configMapRef:
             name: neo4j-mcp-config

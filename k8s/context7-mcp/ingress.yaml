@@ -3,6 +3,10 @@ kind: Ingress
 metadata:
   name: context7-mcp-ingress
   namespace: tas-mcp-servers
+  labels:
+    project: tas
+    service: context7-mcp
+    tier: mcp-servers
   annotations:
     cert-manager.io/cluster-issuer: "tas-ca-issuer"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
