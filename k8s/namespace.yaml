@@ -6,3 +6,4 @@ metadata:
     name: tas-mcp-servers
     project: tas
     purpose: mcp-servers
+    tier: mcp-servers

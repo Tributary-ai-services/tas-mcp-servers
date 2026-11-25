@@ -6,16 +6,25 @@ metadata:
   labels:
     app: podcast-mcp
     component: mcp-server
+    project: tas
+    service: podcast-mcp
+    tier: mcp-servers
 spec:
   replicas: 2
   selector:
     matchLabels:
       app: podcast-mcp
+      project: tas
+      service: podcast-mcp
+      tier: mcp-servers
   template:
     metadata:
       labels:
         app: podcast-mcp
         component: mcp-server
+        project: tas
+        service: podcast-mcp
+        tier: mcp-servers
     spec:
       # Prefer the compute node (pinova01, labelled tas.io/tier=compute).
       # These are stateless MCP servers with no PVCs; running them off the
@@ -34,7 +43,7 @@ spec:
                     values: ["compute"]
       containers:
       - name: podcast-mcp
-        image: registry-api.tas.scharber.com/podcast-mcp-server:1.0.0
+        image: registry-api.tas.scharber.com/podcast-mcp-server:v2.2.1
         imagePullPolicy: Always
         ports:
         - containerPort: 8092

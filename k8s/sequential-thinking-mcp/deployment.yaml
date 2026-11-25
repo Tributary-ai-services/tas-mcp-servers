@@ -6,6 +6,9 @@ metadata:
   labels:
     app: sequential-thinking-mcp
     component: mcp-server
+    project: tas
+    service: sequential-thinking-mcp
+    tier: mcp-servers
 spec:
   replicas: 1
   selector:
@@ -58,7 +61,7 @@ spec:
         - name: BRIDGE_NAME
           value: sequential-thinking-mcp
         - name: BRIDGE_VERSION
-          value: "1.1.0"
+          value: "1.0.0"
         resources: {}
         livenessProbe:
           httpGet:

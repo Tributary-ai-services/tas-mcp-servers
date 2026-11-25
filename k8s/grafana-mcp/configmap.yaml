@@ -6,5 +6,8 @@ metadata:
   labels:
     app: grafana-mcp
     component: mcp-server
+    project: tas
+    service: grafana-mcp
+    tier: mcp-servers
 data:
   GRAFANA_URL: http://grafana-shared.tas-shared.svc.cluster.local:3000

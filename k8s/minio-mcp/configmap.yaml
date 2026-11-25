@@ -6,6 +6,9 @@ metadata:
   labels:
     app: minio-mcp
     component: mcp-server
+    project: tas
+    service: minio-mcp
+    tier: mcp-servers
 data:
   MINIO_ENDPOINT: minio-shared.tas-shared.svc.cluster.local:9000
   MINIO_PORT: "9000"

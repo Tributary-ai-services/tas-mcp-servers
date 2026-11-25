@@ -5,5 +5,8 @@ resources:
   - deployment.yaml
   - service.yaml
   - configmap.yaml
-  - secret.yaml
   - networkpolicy.yaml
+
+# secret.yaml is NOT rendered (MCP-17). postgres-mcp-secret holds the live
+# DATABASE_URL, set out of band; see secret.yaml. Omitting the Secret means no
+# apply of this tree can touch it (OPS-47).

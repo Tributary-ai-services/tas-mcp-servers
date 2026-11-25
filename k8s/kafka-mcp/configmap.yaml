@@ -6,6 +6,9 @@ metadata:
   labels:
     app: kafka-mcp
     component: mcp-server
+    project: tas
+    service: kafka-mcp
+    tier: mcp-servers
 data:
   KAFKA_BROKERS: kafka-shared.tas-shared.svc.cluster.local:9092
   KAFKA_CLIENT_ID: kafka-mcp-server

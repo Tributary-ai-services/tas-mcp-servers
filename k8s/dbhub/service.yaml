@@ -4,8 +4,10 @@ metadata:
   name: dbhub
   namespace: tas-mcp-servers
   labels:
-    app: dbhub
-    component: database-mcp
+    app.kubernetes.io/component: database-mcp
+    app.kubernetes.io/instance: dbhub
+    app.kubernetes.io/managed-by: dbhub-operator
+    app.kubernetes.io/name: dbhub
 spec:
   type: ClusterIP
   ports:

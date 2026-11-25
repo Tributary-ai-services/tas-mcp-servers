@@ -6,6 +6,9 @@ metadata:
   labels:
     app: minio-mcp
     component: mcp-server
+    project: tas
+    service: minio-mcp
+    tier: mcp-servers
 spec:
   type: ClusterIP
   ports:

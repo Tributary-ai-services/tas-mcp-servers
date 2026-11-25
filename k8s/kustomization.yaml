@@ -4,6 +4,25 @@ kind: Kustomization
 metadata:
   name: tas-mcp-servers
 
+# This tree describes production exactly (MCP-17): `kubectl diff -k k8s` exits
+# 0 against the live namespace. Keep it that way — diff before you apply.
+#
+# No repo-wide `labels:` transformer. It used to stamp project/tier onto every
+# object, but production is not uniform: assembler-mcp has neither label (and
+# adding them to its pod template would roll the pod), the dbhub Ingress is
+# `tier: shared-infrastructure`, and several ConfigMaps/CRs carry none. Each
+# manifest now states its live labels itself.
+#
+# Secrets holding live data are NOT rendered by this tree (napkin-mcp,
+# podcast-mcp, postgres-mcp, and every out-of-band Secret). `kubectl apply`
+# deletes any key a manifest omits, so an empty Secret here would wipe live
+# credentials. Each `secret.yaml` is comment-only and says how the Secret is
+# created.
+#
+# napkin-federation-init.yaml was removed: the Job no longer exists, and
+# re-creating it would POST a stale `napkin-mcp-server-v1.0.0` registration.
+# Federation is managed by the FederatedMCPServer CRs and
+# operators/federated-mcp-operator.
 resources:
   - namespace.yaml
   - assembler-mcp
@@ -16,22 +35,8 @@ resources:
   - minio-mcp
   - napkin-mcp
   - napkin-operator
-  - napkin-federation-init.yaml
   - neo4j-mcp
   - paper-search-mcp
   - podcast-mcp
+  - postgres-mcp
   - sequential-thinking-mcp
-
-# `labels:` with includeSelectors:false, NOT commonLabels (OPS-28).
-# commonLabels injects these into the immutable `spec.selector`, so
-# `kubectl apply -k` was rejected outright and this manifest could not
-# restore the workloads it describes.
-labels:
-  - includeSelectors: false
-    # but DO put them on the pod template: the selector (pinned to the live
-    # value in each deployment.yaml) requires them, and a template's labels
-    # must be a superset of the selector or the API rejects the Deployment.
-    includeTemplates: true
-    pairs:
-      project: tas
-      tier: mcp-servers

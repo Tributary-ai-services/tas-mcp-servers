@@ -6,16 +6,25 @@ metadata:
   labels:
     app: napkin-mcp
     component: mcp-server
+    project: tas
+    service: napkin-mcp
+    tier: mcp-servers
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: napkin-mcp
+      project: tas
+      service: napkin-mcp
+      tier: mcp-servers
   template:
     metadata:
       labels:
         app: napkin-mcp
         component: mcp-server
+        project: tas
+        service: napkin-mcp
+        tier: mcp-servers
     spec:
       # Prefer the compute node (pinova01, labelled tas.io/tier=compute).
       # These are stateless MCP servers with no PVCs; running them off the

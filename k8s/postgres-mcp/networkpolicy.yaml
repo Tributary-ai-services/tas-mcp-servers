@@ -25,10 +25,9 @@
 #     ingress rule here (podSelector app=datasource-operator) or to go
 #     through the proxy.
 #
-# Standalone: apply this file on its own (kubectl apply -f), ahead of the
-# bridge image. Never apply the whole k8s/postgres-mcp directory: secret.yaml
-# renders an empty Secret and would delete DATABASE_URL (see aether-shared
-# monitoring.yaml, TASDriftRising).
+# Rendered by k8s/postgres-mcp and the repo-root k8s/ kustomization since
+# MCP-17 (2026-11-25), which also stopped rendering secret.yaml, so applying
+# the directory can no longer delete DATABASE_URL. Diff before applying.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

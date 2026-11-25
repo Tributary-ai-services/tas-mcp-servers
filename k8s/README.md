@@ -20,9 +20,16 @@ k8s/
 
 ### Deploy All MCP Servers
 
+This tree matches production (MCP-17): `kubectl diff -k k8s/` exits 0. Diff
+first, and read every line of the diff before applying.
+
 ```bash
+kubectl diff -k k8s/
 kubectl apply -k k8s/
 ```
+
+Secrets are not rendered by any kustomization here; each `secret.yaml` is
+comment-only and says how its Secret is created out of band.
 
 ### Deploy Individual Server
 

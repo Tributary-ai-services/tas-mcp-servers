@@ -35,15 +35,8 @@ resources:
 # tasuser is a superuser (SEC-39). Users select a database by source id:
 #   execute_sql(source="tas-postgres", sql="SELECT ...")
 
-# `labels:` with includeSelectors:false, NOT commonLabels (OPS-28) — this is
-# what made the Service hazard above possible: commonLabels injects these into
-# spec.selector, so the Service's selector was being computed rather than
-# declared. Values are kept exactly as they are on the live objects rather
-# than aligned to the parent's `tier: mcp-servers`; that mismatch is real but
-# changing it here would be an unrelated relabel. See OPS-30.
-labels:
-  - includeSelectors: false
-    pairs:
-      project: tas
-      tier: shared-infrastructure
-      service: dbhub
+# No `labels:` transformer (MCP-17). It stamped project/tier/service onto
+# the DBHubInstance, the Database and the Service, none of which carry them
+# live (the operator owns the Service's metadata). Each manifest states its
+# live labels; the Ingress keeps `tier: shared-infrastructure` as it is live
+# (OPS-30 tracks that mismatch with the parent's `tier: mcp-servers`).
